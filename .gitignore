@@ -2,3 +2,7 @@ node_modules
 .env
 dist
 uploads
+cuenta-de-servicio*.json
+*-firebase-adminsdk-*.json
+firestore-debug.log
+*-debug.log

@@ -1,163 +1,188 @@
 const router = require('express').Router();
-const prisma = require('../db');
+const { db, aObjeto } = require('../db');
+const { todosLosClientes, invalidar } = require('../cache');
 const { requiereAdmin } = require('../middleware/auth');
 const { clienteSchema, interaccionSchema } = require('../validacion');
 
 const COLUMNAS_ORDEN = ['razonSocial', 'cuit', 'email', 'telefono', 'ciudad', 'estado', 'creadoEn'];
-const incluir = { etiquetas: true };
+const clientes = () => db.collection('clientes');
 
 function errorValidacion(res, error) {
   return res.status(400).json({ error: 'Datos inválidos', detalles: error.flatten().fieldErrors });
 }
 
-// Convierte la lista de nombres de etiquetas en conexiones (creándolas si no existen).
-function conectarEtiquetas(nombres = []) {
-  const unicos = [...new Set(nombres.map((n) => n.toLowerCase()))];
-  return unicos.map((nombre) => ({
-    where: { nombre },
-    create: { nombre },
-  }));
-}
+// Minúsculas y sin tildes: "García" se encuentra buscando "garcia".
+const plano = (s) => String(s ?? '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
+const claveCuit = (cuit) => (cuit ? String(cuit).replace(/\D/g, '') : null);
+const normalizarEtiquetas = (lista = []) => [...new Set(lista.map((n) => n.toLowerCase()))].sort();
 
-// Mapea la violación de unicidad (P2002) a un mensaje claro.
-function manejarDuplicado(err, res) {
-  if (err.code === 'P2002') return res.status(409).json({ error: 'Ya existe un cliente con ese CUIT' });
-  throw err;
-}
+// Respuesta de la API: las etiquetas se muestran como objetos { nombre }.
+const salida = (c) => ({ ...c, etiquetas: (c.etiquetas || []).map((nombre) => ({ nombre })) });
+
+// El CUIT es único: se reserva un documento cuits/{11 dígitos} dentro de una transacción.
+class CuitDuplicado extends Error {}
+const refCuit = (clave) => db.collection('cuits').doc(clave);
 
 router.get('/', async (req, res) => {
   const { q, estado, ciudad, etiqueta, orden = 'razonSocial', dir = 'asc' } = req.query;
   const pagina = Math.max(1, Number(req.query.pagina) || 1);
   const porPagina = Math.min(100, Math.max(1, Number(req.query.porPagina) || 25));
 
-  const where = {};
+  let lista = await todosLosClientes();
   if (q) {
-    where.OR = ['razonSocial', 'email', 'telefono', 'cuit'].map((c) => ({
-      [c]: { contains: String(q), mode: 'insensitive' },
-    }));
+    const buscado = plano(q);
+    lista = lista.filter((c) => ['razonSocial', 'email', 'telefono', 'cuit'].some((k) => plano(c[k]).includes(buscado)));
   }
-  if (['ACTIVO', 'INACTIVO', 'POTENCIAL'].includes(estado)) where.estado = estado;
-  if (ciudad) where.ciudad = { equals: String(ciudad), mode: 'insensitive' };
-  if (etiqueta) where.etiquetas = { some: { nombre: String(etiqueta).toLowerCase() } };
+  if (['ACTIVO', 'INACTIVO', 'POTENCIAL'].includes(estado)) lista = lista.filter((c) => c.estado === estado);
+  if (ciudad) lista = lista.filter((c) => plano(c.ciudad) === plano(ciudad));
+  if (etiqueta) lista = lista.filter((c) => (c.etiquetas || []).includes(String(etiqueta).toLowerCase()));
 
-  const campoOrden = COLUMNAS_ORDEN.includes(orden) ? orden : 'razonSocial';
-  const [total, datos] = await Promise.all([
-    prisma.cliente.count({ where }),
-    prisma.cliente.findMany({
-      where,
-      include: incluir,
-      orderBy: { [campoOrden]: dir === 'desc' ? 'desc' : 'asc' },
-      skip: (pagina - 1) * porPagina,
-      take: porPagina,
-    }),
-  ]);
-  res.json({ total, pagina, porPagina, datos });
+  const campo = COLUMNAS_ORDEN.includes(orden) ? orden : 'razonSocial';
+  const signo = dir === 'desc' ? -1 : 1;
+  const ordenada = [...lista].sort((a, b) => {
+    const x = a[campo], y = b[campo];
+    if (x == null && y == null) return 0;
+    if (x == null) return 1; // los vacíos siempre al final
+    if (y == null) return -1;
+    if (x instanceof Date) return signo * (x - y);
+    return signo * String(x).localeCompare(String(y), 'es', { sensitivity: 'base', numeric: true });
+  });
+
+  res.json({
+    total: ordenada.length,
+    pagina,
+    porPagina,
+    datos: ordenada.slice((pagina - 1) * porPagina, pagina * porPagina).map(salida),
+  });
 });
 
 router.get('/ciudades', async (_req, res) => {
-  const filas = await prisma.cliente.findMany({
-    where: { ciudad: { not: null } },
-    select: { ciudad: true },
-    distinct: ['ciudad'],
-    orderBy: { ciudad: 'asc' },
-  });
-  res.json(filas.map((f) => f.ciudad));
+  const ciudades = new Set((await todosLosClientes()).map((c) => c.ciudad).filter(Boolean));
+  res.json([...ciudades].sort((a, b) => a.localeCompare(b, 'es')));
 });
 
 router.get('/etiquetas', async (_req, res) => {
-  res.json(await prisma.etiqueta.findMany({ orderBy: { nombre: 'asc' } }));
+  const nombres = new Set((await todosLosClientes()).flatMap((c) => c.etiquetas || []));
+  res.json([...nombres].sort().map((nombre) => ({ id: nombre, nombre })));
 });
 
 router.post('/', async (req, res) => {
   const r = clienteSchema.safeParse(req.body);
   if (!r.success) return errorValidacion(res, r.error);
   const { etiquetas, ...datos } = r.data;
+  const ahora = new Date();
+  const ref = clientes().doc();
+  const nuevo = { ...datos, etiquetas: normalizarEtiquetas(etiquetas), creadoEn: ahora, actualizadoEn: ahora };
+  const clave = claveCuit(datos.cuit);
   try {
-    const c = await prisma.cliente.create({
-      data: { ...datos, etiquetas: { connectOrCreate: conectarEtiquetas(etiquetas) } },
-      include: incluir,
+    await db.runTransaction(async (tx) => {
+      if (clave) {
+        if ((await tx.get(refCuit(clave))).exists) throw new CuitDuplicado();
+        tx.set(refCuit(clave), { clienteId: ref.id });
+      }
+      tx.set(ref, nuevo);
     });
-    res.status(201).json(c);
   } catch (e) {
-    manejarDuplicado(e, res);
+    if (e instanceof CuitDuplicado) return res.status(409).json({ error: 'Ya existe un cliente con ese CUIT' });
+    throw e;
   }
+  invalidar();
+  res.status(201).json(salida({ id: ref.id, ...nuevo }));
 });
 
 router.get('/:id', async (req, res) => {
-  const c = await prisma.cliente.findUnique({ where: { id: Number(req.params.id) }, include: incluir });
-  if (!c) return res.status(404).json({ error: 'Cliente no encontrado' });
-  res.json(c);
+  const doc = await clientes().doc(req.params.id).get();
+  if (!doc.exists) return res.status(404).json({ error: 'Cliente no encontrado' });
+  res.json(salida(aObjeto(doc)));
 });
 
 router.put('/:id', async (req, res) => {
-  const id = Number(req.params.id);
   const r = clienteSchema.safeParse(req.body);
   if (!r.success) return errorValidacion(res, r.error);
-  if (!(await prisma.cliente.findUnique({ where: { id } }))) {
-    return res.status(404).json({ error: 'Cliente no encontrado' });
-  }
+  const ref = clientes().doc(req.params.id);
   const { etiquetas, ...datos } = r.data;
+  const claveNueva = claveCuit(datos.cuit);
   try {
-    const c = await prisma.cliente.update({
-      where: { id },
-      data: { ...datos, etiquetas: { set: [], connectOrCreate: conectarEtiquetas(etiquetas) } },
-      include: incluir,
+    const resultado = await db.runTransaction(async (tx) => {
+      const actual = await tx.get(ref);
+      if (!actual.exists) return null;
+      const claveVieja = claveCuit(actual.data().cuit);
+      if (claveNueva !== claveVieja) {
+        if (claveNueva) {
+          if ((await tx.get(refCuit(claveNueva))).exists) throw new CuitDuplicado();
+          tx.set(refCuit(claveNueva), { clienteId: ref.id });
+        }
+        if (claveVieja) tx.delete(refCuit(claveVieja));
+      }
+      const cambios = { ...datos, etiquetas: normalizarEtiquetas(etiquetas), actualizadoEn: new Date() };
+      tx.update(ref, cambios);
+      return { ...actual.data(), ...cambios };
     });
-    res.json(c);
+    if (!resultado) return res.status(404).json({ error: 'Cliente no encontrado' });
+    invalidar();
+    res.json(salida({ id: ref.id, ...resultado }));
   } catch (e) {
-    manejarDuplicado(e, res);
+    if (e instanceof CuitDuplicado) return res.status(409).json({ error: 'Ya existe un cliente con ese CUIT' });
+    throw e;
   }
 });
 
 // Por defecto se archiva (estado INACTIVO); solo un administrador puede borrar definitivamente.
 router.delete('/:id', async (req, res) => {
-  const id = Number(req.params.id);
-  if (!(await prisma.cliente.findUnique({ where: { id } }))) {
-    return res.status(404).json({ error: 'Cliente no encontrado' });
-  }
+  const ref = clientes().doc(req.params.id);
+  const doc = await ref.get();
+  if (!doc.exists) return res.status(404).json({ error: 'Cliente no encontrado' });
   if (req.query.definitivo === 'true') {
     return requiereAdmin(req, res, async () => {
-      await prisma.cliente.delete({ where: { id } });
+      const clave = claveCuit(doc.data().cuit);
+      await db.recursiveDelete(ref); // borra también el historial (subcolección)
+      if (clave) await refCuit(clave).delete();
+      invalidar();
       res.status(204).end();
     });
   }
-  res.json(await prisma.cliente.update({ where: { id }, data: { estado: 'INACTIVO' }, include: incluir }));
+  await ref.update({ estado: 'INACTIVO', actualizadoEn: new Date() });
+  invalidar();
+  res.json(salida(aObjeto(await ref.get())));
 });
 
-// ---- Historial de interacciones ----
+// ---- Historial de interacciones (subcolección clientes/{id}/interacciones) ----
+const interacciones = (clienteId) => clientes().doc(clienteId).collection('interacciones');
+const salidaInteraccion = (i) => {
+  const { usuarioId, usuarioNombre, ...resto } = i;
+  return { ...resto, usuario: { id: usuarioId, nombre: usuarioNombre } };
+};
+
 router.get('/:id/interacciones', async (req, res) => {
-  res.json(
-    await prisma.interaccion.findMany({
-      where: { clienteId: Number(req.params.id) },
-      include: { usuario: { select: { id: true, nombre: true } } },
-      orderBy: { fecha: 'desc' },
-    })
-  );
+  const snap = await interacciones(req.params.id).orderBy('fecha', 'desc').get();
+  res.json(snap.docs.map((d) => salidaInteraccion(aObjeto(d))));
 });
 
 router.post('/:id/interacciones', async (req, res) => {
-  const clienteId = Number(req.params.id);
   const r = interaccionSchema.safeParse(req.body);
   if (!r.success) return errorValidacion(res, r.error);
-  if (!(await prisma.cliente.findUnique({ where: { id: clienteId } }))) {
+  if (!(await clientes().doc(req.params.id).get()).exists) {
     return res.status(404).json({ error: 'Cliente no encontrado' });
   }
-  const i = await prisma.interaccion.create({
-    data: { ...r.data, clienteId, usuarioId: req.usuario.id },
-    include: { usuario: { select: { id: true, nombre: true } } },
-  });
-  res.status(201).json(i);
+  const autor = await db.collection('usuarios').doc(req.usuario.id).get();
+  const nueva = {
+    ...r.data,
+    fecha: r.data.fecha ?? new Date(),
+    usuarioId: req.usuario.id,
+    usuarioNombre: autor.data().nombre,
+  };
+  const ref = await interacciones(req.params.id).add(nueva);
+  res.status(201).json(salidaInteraccion({ id: ref.id, ...nueva }));
 });
 
 router.delete('/:id/interacciones/:iid', async (req, res) => {
-  const i = await prisma.interaccion.findFirst({
-    where: { id: Number(req.params.iid), clienteId: Number(req.params.id) },
-  });
-  if (!i) return res.status(404).json({ error: 'Interacción no encontrada' });
-  if (i.usuarioId !== req.usuario.id && req.usuario.rol !== 'ADMIN') {
+  const ref = interacciones(req.params.id).doc(req.params.iid);
+  const doc = await ref.get();
+  if (!doc.exists) return res.status(404).json({ error: 'Interacción no encontrada' });
+  if (doc.data().usuarioId !== req.usuario.id && req.usuario.rol !== 'ADMIN') {
     return res.status(403).json({ error: 'Solo el autor o un administrador puede borrarla' });
   }
-  await prisma.interaccion.delete({ where: { id: i.id } });
+  await ref.delete();
   res.status(204).end();
 });
 

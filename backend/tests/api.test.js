@@ -1,7 +1,8 @@
 const request = require('supertest');
 const bcrypt = require('bcryptjs');
 const app = require('../src/app');
-const prisma = require('../src/db');
+const { db } = require('../src/db');
+const { invalidar } = require('../src/cache');
 const { cuitValido } = require('../src/validacion');
 
 let admin, user;
@@ -13,17 +14,14 @@ async function login(email, password = 'clave12345') {
 }
 
 beforeAll(async () => {
-  await prisma.interaccion.deleteMany();
-  await prisma.cliente.deleteMany();
-  await prisma.etiqueta.deleteMany();
-  await prisma.usuario.deleteMany();
+  for (const c of ['clientes', 'cuits', 'usuarios']) await db.recursiveDelete(db.collection(c));
+  invalidar();
   const passwordHash = await bcrypt.hash('clave12345', 4);
-  await prisma.usuario.create({ data: { nombre: 'Admin', email: 'admin@t.com', passwordHash, rol: 'ADMIN' } });
-  await prisma.usuario.create({ data: { nombre: 'Ana', email: 'ana@t.com', passwordHash } });
+  await db.collection('usuarios').add({ nombre: 'Admin', email: 'admin@t.com', passwordHash, rol: 'ADMIN', activo: true });
+  await db.collection('usuarios').add({ nombre: 'Ana', email: 'ana@t.com', passwordHash, rol: 'USUARIO', activo: true });
   admin = await login('admin@t.com');
   user = await login('ana@t.com');
 });
-afterAll(() => prisma.$disconnect());
 
 describe('CUIT', () => {
   it('valida dígito verificador', () => {
@@ -51,7 +49,7 @@ describe('clientes', () => {
     await user.post('/api/clientes').send({ razonSocial: 'X', email: 'no-es-email' }).expect(400);
     const r = await user
       .post('/api/clientes')
-      .send({ razonSocial: 'Perez SRL', cuit: '20-12345678-6', condicionIva: 'Responsable Inscripto',
+      .send({ razonSocial: 'Pérez SRL', cuit: '20-12345678-6', condicionIva: 'Responsable Inscripto',
         estado: 'ACTIVO', ciudad: 'Santa Rosa', email: 'perez@x.com', telefono: '2954-123456', etiquetas: ['Monotributo'] })
       .expect(201);
     id = r.body.id;
@@ -72,11 +70,13 @@ describe('clientes', () => {
     expect(o.body.datos[0].razonSocial).toBe('Potencial Uno');
     // Entrada maliciosa no rompe la consulta
     await user.get(`/api/clientes?q=${encodeURIComponent("'; DROP TABLE \"Cliente\";--")}&orden=hack`).expect(200);
+    // La búsqueda ignora tildes y mayúsculas
+    expect((await user.get('/api/clientes?q=PEREZ').expect(200)).body.total).toBe(1);
   });
   it('actualiza y registra interacciones', async () => {
-    const u = await user.put(`/api/clientes/${id}`).send({ razonSocial: 'Perez SA', cuit: '20-12345678-6',
+    const u = await user.put(`/api/clientes/${id}`).send({ razonSocial: 'Pérez SA', cuit: '20-12345678-6',
       condicionIva: 'RI', estado: 'ACTIVO', etiquetas: [] }).expect(200);
-    expect(u.body.razonSocial).toBe('Perez SA');
+    expect(u.body.razonSocial).toBe('Pérez SA');
     const i = await user.post(`/api/clientes/${id}/interacciones`).send({ tipo: 'LLAMADA', detalle: 'Consulta IVA' }).expect(201);
     expect((await user.get(`/api/clientes/${id}/interacciones`)).body).toHaveLength(1);
     await admin.delete(`/api/clientes/${id}/interacciones/${i.body.id}`).expect(204);
@@ -86,5 +86,7 @@ describe('clientes', () => {
     await user.delete(`/api/clientes/${id}?definitivo=true`).expect(403);
     await admin.delete(`/api/clientes/${id}?definitivo=true`).expect(204);
     await user.get(`/api/clientes/${id}`).expect(404);
+    // El CUIT queda libre al borrar
+    await user.post('/api/clientes').send({ razonSocial: 'Reusa CUIT', cuit: '20-12345678-6' }).expect(201);
   });
 });
