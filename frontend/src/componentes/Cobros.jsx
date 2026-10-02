@@ -3,16 +3,17 @@ import { api } from '../api';
 import { useAuth } from '../auth';
 import { hoyISO, pesos } from '../formato';
 import { verFecha } from '../fechas';
+import Alerta from './Alerta';
 
 const MEDIOS = { TRANSFERENCIA: 'Transferencia', EFECTIVO: 'Efectivo', CHEQUE: 'Cheque', TARJETA: 'Tarjeta', OTRO: 'Otro' };
-const ESTILO = { PENDIENTE: 'bg-red-100 text-red-700', PARCIAL: 'bg-amber-100 text-amber-800', PAGADO: 'bg-green-100 text-green-700' };
+const ESTILO = { PENDIENTE: 'insignia-linea', PARCIAL: 'insignia-linea', PAGADO: 'insignia-gris' };
 const NOMBRE = { PENDIENTE: 'Pendiente', PARCIAL: 'Parcial', PAGADO: 'Pagado' };
 
 export function EstadoCobro({ honorario }) {
   return (
     <span className="whitespace-nowrap">
-      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${ESTILO[honorario.estado]}`}>{NOMBRE[honorario.estado]}</span>
-      {honorario.vencido && <span className="ml-1 rounded-full bg-red-600 px-2 py-0.5 text-xs font-medium text-white">Vencido</span>}
+      <span className={ESTILO[honorario.estado]}>{NOMBRE[honorario.estado]}</span>
+      {honorario.vencido && <span className="insignia-negra ml-1">Vencido</span>}
     </span>
   );
 }
@@ -35,7 +36,7 @@ export function CobroForm({ honorario, alGuardar, alCancelar }) {
     }
   }
   return (
-    <form onSubmit={guardar} className="space-y-2 rounded border bg-slate-50 p-3">
+    <form onSubmit={guardar} className="space-y-3 rounded-panel border p-4">
       <p className="text-sm font-medium">Registrar cobro · saldo {pesos(honorario.saldo)}</p>
       <div className="grid gap-2 sm:grid-cols-4">
         <input className="campo" type="number" step="0.01" min="0.01" required value={f.monto} onChange={(e) => setF({ ...f, monto: e.target.value })} aria-label="Monto cobrado" />
@@ -45,11 +46,11 @@ export function CobroForm({ honorario, alGuardar, alCancelar }) {
         </select>
         <input className="campo" placeholder="Nota (opcional)" value={f.nota} onChange={(e) => setF({ ...f, nota: e.target.value })} aria-label="Nota" />
       </div>
-      {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
+      {error && <Alerta tipo="error">{error}</Alerta>}
       <div className="flex gap-2">
         <button className="btn-primario" disabled={guardando}>Guardar cobro</button>
         <button type="button" className="btn-sec" onClick={alCancelar}>Cancelar</button>
-        <button type="button" className="text-xs text-blue-700 hover:underline" onClick={() => setF({ ...f, monto: String(honorario.saldo) })}>Cobrar el saldo completo</button>
+        <button type="button" className="text-xs enlace" onClick={() => setF({ ...f, monto: String(honorario.saldo) })}>Cobrar el saldo completo</button>
       </div>
     </form>
   );
@@ -67,16 +68,16 @@ export function ListaCobros({ honorario, alCambiar }) {
     await api(`/honorarios/${honorario.id}/pagos/${p.id}`, { metodo: 'DELETE' });
     alCambiar();
   }
-  if (!pagos) return <p className="py-2 text-xs text-slate-500">Cargando…</p>;
-  if (pagos.length === 0) return <p className="py-2 text-xs text-slate-500">Sin cobros registrados.</p>;
+  if (!pagos) return <p className="py-2 text-xs text-machine">Cargando…</p>;
+  if (pagos.length === 0) return <p className="py-2 text-xs text-machine">Sin cobros registrados.</p>;
   return (
-    <ul className="divide-y rounded border bg-white text-sm">
+    <ul className="divide-y rounded-panel border bg-white text-sm">
       {pagos.map((p) => (
         <li key={p.id} className="flex flex-wrap items-center gap-x-3 px-3 py-1.5">
-          <span className="w-24 text-slate-500">{verFecha(p.fecha)}</span>
+          <span className="w-24 text-machine">{verFecha(p.fecha)}</span>
           <span className="font-medium">{pesos(p.monto)}</span>
-          <span className="text-xs text-slate-500">{MEDIOS[p.medio]}{p.nota ? ` · ${p.nota}` : ''}</span>
-          {usuario.rol === 'ADMIN' && <button className="ml-auto text-xs text-red-600 hover:underline" onClick={() => anular(p)}>Anular</button>}
+          <span className="text-xs text-machine">{MEDIOS[p.medio]}{p.nota ? ` · ${p.nota}` : ''}</span>
+          {usuario.rol === 'ADMIN' && <button className="ml-auto text-xs enlace-tenue" onClick={() => anular(p)}>Anular</button>}
         </li>
       ))}
     </ul>

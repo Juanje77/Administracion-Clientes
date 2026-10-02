@@ -100,6 +100,14 @@ por eso funciona también con varias instancias a la vez. Es adecuado para hasta
 Las tareas y vencimientos pendientes llevan un campo auxiliar (`alerta`) que desaparece al cerrarlos, para consultar
 solo lo pendiente sin leer el historial.
 
+## Estilo visual
+La interfaz sigue la guía de estilo `DESIGN_1.md` (referencia "FigureAI"): lienzo blanco, texto en negro exacto (`#0c0c0c`), grises técnicos (`#6d6d6d` para texto secundario y
+`#cecece` para las reglas de 1 px) y **ningún color de acento, degradado ni sombra**. La navegación y las cifras usan *Space Grotesk* en mayúsculas (sustituto de PP Neue Machina) y el texto
+*Inter* (sustituto de Neue Haas Grotesk), ambas incluidas en el proyecto (no se descargan de internet). Botones: píldora negra de 24 px de radio; campos transparentes con una sola línea;
+paneles de 12 px de radio con borde fino. Como no hay colores de semáforo, los estados se distinguen por forma y texto: **insignia negra** = requiere acción (vencida, hoy, vencido),
+**con contorno** = atención (próxima, parcial, pendiente) y **gris** = tranquilo o cerrado; los mensajes llevan un símbolo (✕ error, ✓ listo, ! aviso). La paleta está limitada en
+`frontend/tailwind.config.js`: cualquier clase de color fuera de ella simplemente no se genera, así que no se puede "colar" un color sin querer. Los correos y el gráfico siguen el mismo estilo.
+
 ## Quién ve el dinero
 **Todo lo que es dinero lo ve únicamente quien tiene acceso a los montos.** Los administradores siempre lo tienen; un usuario común **no lo tiene por defecto** y un administrador
 puede dárselo o quitárselo en cualquier momento desde *Usuarios* (casilla "Puede ver honorarios, cobros, deudas y montos"). Es el servidor el que lo aplica, no solo la pantalla.

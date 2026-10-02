@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { api } from '../api';
 import { useAuth } from '../auth';
+import Alerta from '../componentes/Alerta';
 
 export default function Cuenta() {
   const { usuario, actualizarUsuario } = useAuth();
@@ -37,22 +38,22 @@ export default function Cuenta() {
 
   return (
     <div className="max-w-md space-y-4">
-      <h1 className="text-xl font-semibold">Mi cuenta</h1>
-      <p className="text-sm text-slate-600">{usuario.nombre} · {usuario.email}</p>
-      <section className="space-y-2 rounded-lg border bg-white p-4">
-        <h2 className="font-semibold">Avisos por email</h2>
+      <h1 className="titulo-pagina">Mi cuenta</h1>
+      <p className="text-sm text-machine">{usuario.nombre} · {usuario.email}</p>
+      <section className="space-y-2 panel">
+        <h2 className="titulo-seccion">Avisos por email</h2>
         <label className="flex items-start gap-2 text-sm">
           <input type="checkbox" className="mt-0.5" checked={avisos} onChange={cambiarAvisos} />
           <span>Recibir cada mañana (de lunes a viernes) un resumen con mis tareas, los vencimientos y, si soy administrador, los deudores (solo si hay algo pendiente), y un email cuando alguien me asigna una tarea.</span>
         </label>
-        {prefMsg && <p role="alert" className="text-sm text-red-600">{prefMsg}</p>}
+        {prefMsg && <Alerta tipo="error">{prefMsg}</Alerta>}
       </section>
-      <form onSubmit={cambiar} className="space-y-3 rounded-lg border bg-white p-4">
-        <h2 className="font-semibold">Cambiar contraseña</h2>
+      <form onSubmit={cambiar} className="space-y-3 panel">
+        <h2 className="titulo-seccion">Cambiar contraseña</h2>
         {campo('actual', 'Contraseña actual')}
         {campo('nueva', 'Nueva contraseña (mín. 8 caracteres)')}
         {campo('repetir', 'Repetir nueva contraseña')}
-        {msg && <p role={msg.ok ? 'status' : 'alert'} className={`text-sm ${msg.ok ? 'text-green-700' : 'text-red-600'}`}>{msg.texto}</p>}
+        {msg && <Alerta tipo={msg.ok ? 'ok' : 'error'}>{msg.texto}</Alerta>}
         <button className="btn-primario">Guardar</button>
       </form>
     </div>

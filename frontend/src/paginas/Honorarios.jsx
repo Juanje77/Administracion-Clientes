@@ -2,16 +2,9 @@ import { Fragment, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
 import { mesActual, pesos } from '../formato';
+import Dato from '../componentes/Dato';
 import { CobroForm, EstadoCobro, ListaCobros } from '../componentes/Cobros';
-
-function Tarjeta({ titulo, valor, color }) {
-  return (
-    <div className="rounded-lg border bg-white p-3">
-      <p className="text-xs text-slate-500">{titulo}</p>
-      <p className={`text-xl font-semibold ${color}`}>{valor}</p>
-    </div>
-  );
-}
+import Alerta from '../componentes/Alerta';
 
 function PorMes() {
   const [periodo, setPeriodo] = useState(mesActual());
@@ -43,10 +36,10 @@ function PorMes() {
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-3 gap-3">
-        <Tarjeta titulo="Facturado" valor={pesos(r.totales.monto)} color="text-slate-800" />
-        <Tarjeta titulo="Cobrado" valor={pesos(r.totales.pagado)} color="text-green-700" />
-        <Tarjeta titulo="Pendiente" valor={pesos(r.totales.saldo)} color={r.totales.saldo > 0 ? 'text-red-600' : 'text-slate-400'} />
+      <div className="grid gap-x-8 sm:grid-cols-3">
+        <Dato titulo="Facturado" valor={pesos(r.totales.monto)} destacado />
+        <Dato titulo="Cobrado" valor={pesos(r.totales.pagado)} destacado />
+        <Dato titulo="Pendiente" valor={pesos(r.totales.saldo)} destacado />
       </div>
       <div className="grid gap-2 sm:grid-cols-[10rem_10rem_1fr_auto]">
         <input type="month" className="campo" value={periodo} onChange={(e) => e.target.value && setPeriodo(e.target.value)} aria-label="Mes" />
@@ -59,40 +52,40 @@ function PorMes() {
         <input className="campo" placeholder="Buscar cliente" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Buscar cliente" />
         <button className="btn-sec" onClick={generar}>Generar abonos del mes</button>
       </div>
-      {msg && <p role={msg.ok ? 'status' : 'alert'} className={`text-sm ${msg.ok ? 'text-green-700' : 'text-red-600'}`}>{msg.texto}</p>}
-      <p className="text-sm text-slate-600">
+      {msg && <Alerta tipo={msg.ok ? 'ok' : 'error'}>{msg.texto}</Alerta>}
+      <p className="text-sm text-machine">
         Descargar este mes:{' '}
-        <a className="text-blue-700 hover:underline" href={`/api/exportar/honorarios.xlsx?periodo=${periodo}`}>Excel</a> · <a className="text-blue-700 hover:underline" href={`/api/exportar/honorarios.pdf?periodo=${periodo}`}>PDF</a>
+        <a className="enlace" href={`/api/exportar/honorarios.xlsx?periodo=${periodo}`}>Excel</a> · <a className="enlace" href={`/api/exportar/honorarios.pdf?periodo=${periodo}`}>PDF</a>
       </p>
 
-      <div className="overflow-x-auto rounded-lg border bg-white">
+      <div className="overflow-x-auto panel-plano">
         <table className="w-full text-left text-sm">
-          <thead className="border-b bg-slate-50 text-xs uppercase text-slate-500">
+          <thead className="encabezado-tabla">
             <tr><th className="px-3 py-2">Cliente</th><th className="px-3 py-2">Concepto</th><th className="px-3 py-2 text-right">Facturado</th><th className="px-3 py-2 text-right">Cobrado</th><th className="px-3 py-2 text-right">Saldo</th><th className="px-3 py-2">Estado</th><th /></tr>
           </thead>
           <tbody className="divide-y">
             {r.datos.map((h) => (
               <Fragment key={h.id}>
                 <tr className="align-top">
-                  <td className="px-3 py-2 font-medium"><Link className="text-blue-700 hover:underline" to={`/clientes/${h.clienteId}`}>{h.clienteNombre}</Link></td>
+                  <td className="px-3 py-2 font-medium"><Link className="enlace" to={`/clientes/${h.clienteId}`}>{h.clienteNombre}</Link></td>
                   <td className="px-3 py-2">{h.concepto}</td>
                   <td className="whitespace-nowrap px-3 py-2 text-right">{pesos(h.monto)}</td>
                   <td className="whitespace-nowrap px-3 py-2 text-right">{pesos(h.pagado)}</td>
                   <td className="whitespace-nowrap px-3 py-2 text-right font-medium">{pesos(h.saldo)}</td>
                   <td className="px-3 py-2"><EstadoCobro honorario={h} /></td>
                   <td className="whitespace-nowrap px-3 py-2 text-right">
-                    {h.saldo > 0 && <button className="btn-primario" onClick={() => setAbierto(abierto?.id === h.id && abierto.modo === 'cobrar' ? null : { id: h.id, modo: 'cobrar' })}>Cobrar</button>}{' '}
-                    {h.pagado > 0 && <button className="btn-sec" onClick={() => setAbierto(abierto?.id === h.id && abierto.modo === 'ver' ? null : { id: h.id, modo: 'ver' })}>Cobros</button>}
+                    {h.saldo > 0 && <button className="btn-primario btn-sm" onClick={() => setAbierto(abierto?.id === h.id && abierto.modo === 'cobrar' ? null : { id: h.id, modo: 'cobrar' })}>Cobrar</button>}{' '}
+                    {h.pagado > 0 && <button className="btn-sec btn-sm" onClick={() => setAbierto(abierto?.id === h.id && abierto.modo === 'ver' ? null : { id: h.id, modo: 'ver' })}>Cobros</button>}
                   </td>
                 </tr>
                 {abierto?.id === h.id && (
-                  <tr><td colSpan={7} className="bg-slate-50 px-3 py-3">
+                  <tr><td colSpan={7} className="px-3 py-3">
                     {abierto.modo === 'cobrar' ? <CobroForm honorario={h} alGuardar={terminado} alCancelar={() => setAbierto(null)} /> : <ListaCobros honorario={h} alCambiar={terminado} />}
                   </td></tr>
                 )}
               </Fragment>
             ))}
-            {r.datos.length === 0 && <tr><td colSpan={7} className="px-3 py-8 text-center text-slate-500">No hay honorarios en este mes. Usa “Generar abonos del mes” para crearlos desde el abono de cada cliente.</td></tr>}
+            {r.datos.length === 0 && <tr><td colSpan={7} className="px-3 py-8 text-center text-machine">No hay honorarios en este mes. Usa “Generar abonos del mes” para crearlos desde el abono de cada cliente.</td></tr>}
           </tbody>
         </table>
       </div>
@@ -103,29 +96,29 @@ function PorMes() {
 function Deudores() {
   const [r, setR] = useState(null);
   useEffect(() => { api('/honorarios/deudores').then(setR); }, []);
-  if (!r) return <p className="text-slate-500">Cargando…</p>;
+  if (!r) return <p className="text-machine">Cargando…</p>;
   return (
     <div className="space-y-4">
-      <Tarjeta titulo="Total adeudado por clientes" valor={pesos(r.total)} color={r.total > 0 ? 'text-red-600' : 'text-slate-400'} />
-      <p className="text-sm text-slate-600">
+      <Dato titulo="Total adeudado por clientes" valor={pesos(r.total)} destacado />
+      <p className="text-sm text-machine">
         Descargar:{' '}
-        <a className="text-blue-700 hover:underline" href="/api/exportar/deudores.xlsx">Excel</a> · <a className="text-blue-700 hover:underline" href="/api/exportar/deudores.pdf">PDF</a>
+        <a className="enlace" href="/api/exportar/deudores.xlsx">Excel</a> · <a className="enlace" href="/api/exportar/deudores.pdf">PDF</a>
       </p>
-      <div className="overflow-x-auto rounded-lg border bg-white">
+      <div className="overflow-x-auto panel-plano">
         <table className="w-full text-left text-sm">
-          <thead className="border-b bg-slate-50 text-xs uppercase text-slate-500">
+          <thead className="encabezado-tabla">
             <tr><th className="px-3 py-2">Cliente</th><th className="px-3 py-2">Períodos adeudados</th><th className="px-3 py-2">Desde</th><th className="px-3 py-2 text-right">Saldo</th></tr>
           </thead>
           <tbody className="divide-y">
             {r.datos.map((d) => (
               <tr key={d.clienteId}>
-                <td className="px-3 py-2 font-medium"><Link className="text-blue-700 hover:underline" to={`/clientes/${d.clienteId}`}>{d.clienteNombre}</Link></td>
+                <td className="px-3 py-2 font-medium"><Link className="enlace" to={`/clientes/${d.clienteId}`}>{d.clienteNombre}</Link></td>
                 <td className="px-3 py-2">{d.cantidad}</td>
                 <td className="px-3 py-2">{d.masAntiguo}</td>
-                <td className="whitespace-nowrap px-3 py-2 text-right font-semibold text-red-600">{pesos(d.saldo)}</td>
+                <td className="whitespace-nowrap px-3 py-2 text-right font-medium text-figure">{pesos(d.saldo)}</td>
               </tr>
             ))}
-            {r.datos.length === 0 && <tr><td colSpan={4} className="px-3 py-8 text-center text-slate-500">Nadie debe nada. 🎉</td></tr>}
+            {r.datos.length === 0 && <tr><td colSpan={4} className="px-3 py-8 text-center text-machine">Nadie debe nada. 🎉</td></tr>}
           </tbody>
         </table>
       </div>
@@ -136,13 +129,13 @@ function Deudores() {
 export default function Honorarios() {
   const [vista, setVista] = useState('mes');
   const tab = (id, texto) => (
-    <button onClick={() => setVista(id)} className={`rounded-md px-3 py-1.5 text-sm ${vista === id ? 'bg-blue-100 text-blue-700' : 'text-slate-600 hover:bg-slate-100'}`}>{texto}</button>
+    <button onClick={() => setVista(id)} className={`tecnica border-b-2 py-2 text-[13px] leading-none ${vista === id ? 'border-figure text-figure' : 'border-transparent text-machine hover:text-figure'}`}>{texto}</button>
   );
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-xl font-semibold">Honorarios</h1>
-        <div className="flex gap-1">{tab('mes', 'Por mes')}{tab('deudores', 'Deudores')}</div>
+        <h1 className="titulo-pagina">Honorarios</h1>
+        <div className="flex gap-6">{tab('mes', 'Por mes')}{tab('deudores', 'Deudores')}</div>
       </div>
       {vista === 'mes' ? <PorMes /> : <Deudores />}
     </div>

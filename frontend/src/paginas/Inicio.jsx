@@ -5,17 +5,8 @@ import { useAuth } from '../auth';
 import { mesActual, pesos } from '../formato';
 import { nombrePeriodo } from '../fechas';
 import GraficoMeses from '../componentes/GraficoMeses';
-
-function Tile({ titulo, valor, detalle, color = 'text-slate-800', a }) {
-  const cuerpo = (
-    <div className="h-full rounded-lg border bg-white p-4 hover:border-slate-300">
-      <p className="text-xs text-slate-500">{titulo}</p>
-      <p className={`mt-1 whitespace-nowrap text-lg font-semibold sm:text-2xl ${color}`}>{valor}</p>
-      {detalle && <p className="mt-0.5 text-xs text-slate-500">{detalle}</p>}
-    </div>
-  );
-  return a ? <Link to={a}>{cuerpo}</Link> : cuerpo;
-}
+import Alerta from '../componentes/Alerta';
+import Dato from '../componentes/Dato';
 
 export default function Inicio() {
   const { usuario } = useAuth();
@@ -38,59 +29,64 @@ export default function Inicio() {
   const valor = (n) => (n === null || n === undefined ? '—' : pesos(n));
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-xl font-semibold">Inicio</h1>
-        <label className="flex items-center gap-2 text-sm">
-          Período
+    <div className="space-y-10">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <h1 className="titulo-pagina">Inicio</h1>
+        <label className="flex items-center gap-3 text-[14px]">
+          <span className="tecnica text-[12px] text-machine">Período</span>
           <input type="month" className="campo w-44" value={periodo} onChange={(e) => e.target.value && setPeriodo(e.target.value)} />
         </label>
       </div>
-      {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
-      {!d ? !error && <p className="text-slate-500">Cargando…</p> : (
+      {error && <Alerta tipo="error">{error}</Alerta>}
+      {!d ? !error && <p className="text-machine">Cargando…</p> : (
         <>
           {d.avisos?.length > 0 && (
-            <div role="alert" className="rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
-              <p className="font-medium">Parte del Inicio no se pudo cargar:</p>
+            <div role="alert" className="rounded-panel border border-figure p-4 text-sm">
+              <p className="mb-1 font-medium">Parte del Inicio no se pudo cargar:</p>
               <ul className="ml-5 list-disc">{d.avisos.map((a, i) => <li key={i}>{a}</li>)}</ul>
-              <button className="mt-1 text-blue-700 hover:underline" onClick={cargar}>Reintentar</button>
+              <button className="enlace mt-2" onClick={cargar}>Reintentar</button>
             </div>
           )}
-          {/* Una sola cifra protagonista: lo cobrado en el período (solo para quien tiene acceso a los montos) */}
-          {d.dinero && <section className="rounded-lg border bg-white p-5 sm:p-6">
-            <p className="text-sm text-slate-500">Cobrado en {nombrePeriodo(d.periodo)}</p>
-            <p className="mt-1 break-words text-3xl font-semibold text-slate-900 sm:text-5xl">{valor(d.honorarios.cobrado)}</p>
-            <p className="mt-2 text-sm text-slate-600">de {valor(d.honorarios.facturado)} facturados en el mes</p>
-          </section>}
 
-          <div className={`grid grid-cols-2 gap-3 ${d.dinero ? 'lg:grid-cols-4' : 'lg:grid-cols-3'}`}>
-            {d.dinero && <Tile titulo="Deuda total de clientes" valor={valor(d.honorarios.deudaTotal)} color={d.honorarios.deudaTotal > 0 ? 'text-red-600' : 'text-slate-400'} detalle={d.honorarios.deudoresCantidad === null ? undefined : `${d.honorarios.deudoresCantidad} clientes`} a="/honorarios" />}
-            <Tile titulo="Clientes activos" valor={d.clientes?.activos ?? '—'} detalle={d.clientes && `${d.clientes.total} en total · ${d.clientes.potenciales} potenciales`} a="/clientes" />
-            <Tile titulo={`Nuevos en ${nombrePeriodo(d.periodo)}`} valor={d.clientes?.nuevosMes ?? '—'} a="/clientes" />
-            <Tile titulo="Pendientes urgentes" valor={d.agenda?.urgentes ?? '—'} color={d.agenda?.urgentes > 0 ? 'text-red-600' : 'text-slate-400'} detalle="vencidos o para hoy" a="/agenda" />
+          {/* Una sola cifra protagonista: lo cobrado en el período (solo para quien tiene acceso a los montos) */}
+          {d.dinero && (
+            <section>
+              <p className="tecnica text-[12px] text-machine">Cobrado en {nombrePeriodo(d.periodo)}</p>
+              <p className="mt-3 break-words font-tecnica text-[44px] font-normal leading-none tracking-[-0.03em] text-figure sm:text-[72px] lg:text-[96px]">{valor(d.honorarios.cobrado)}</p>
+              <p className="mt-4 text-[17px] leading-[1.6] text-machine">de {valor(d.honorarios.facturado)} facturados en el mes</p>
+            </section>
+          )}
+
+          <div className={`grid grid-cols-2 gap-x-8 ${d.dinero ? 'lg:grid-cols-4' : 'lg:grid-cols-3'}`}>
+            {d.dinero && <Dato titulo="Deuda total de clientes" valor={valor(d.honorarios.deudaTotal)} destacado={d.honorarios.deudaTotal > 0} detalle={d.honorarios.deudoresCantidad === null ? undefined : `${d.honorarios.deudoresCantidad} clientes`} a="/honorarios" />}
+            <Dato titulo="Clientes activos" valor={d.clientes?.activos ?? '—'} destacado detalle={d.clientes && `${d.clientes.total} en total · ${d.clientes.potenciales} potenciales`} a="/clientes" />
+            <Dato titulo={`Nuevos en ${nombrePeriodo(d.periodo)}`} valor={d.clientes?.nuevosMes ?? '—'} a="/clientes" />
+            <Dato titulo="Pendientes urgentes" valor={d.agenda?.urgentes ?? '—'} destacado={d.agenda?.urgentes > 0} detalle="vencidos o para hoy" a="/agenda" />
           </div>
 
           {d.dinero && d.serie && <GraficoMeses serie={d.serie} seleccionado={d.periodo} />}
 
-          {d.dinero && d.honorarios.deudaTotal !== null && <section className="rounded-lg border bg-white p-4 sm:p-6">
-            <div className="mb-3 flex items-baseline justify-between">
-              <h2 className="font-semibold">Mayores deudores</h2>
-              <Link to="/honorarios" className="text-sm text-blue-700 hover:underline">Ver todos</Link>
-            </div>
-            <ul className="divide-y">
-              {d.honorarios.topDeudores.map((x) => (
-                <li key={x.clienteId} className="flex items-center gap-3 py-2 text-sm">
-                  <Link className="flex-1 font-medium text-blue-700 hover:underline" to={`/clientes/${x.clienteId}`}>{x.clienteNombre}</Link>
-                  <span className="text-xs text-slate-500">{x.cantidad} {x.cantidad === 1 ? 'período' : 'períodos'}</span>
-                  <span className="tabular-nums font-semibold text-red-600">{pesos(x.saldo)}</span>
-                </li>
-              ))}
-              {d.honorarios.topDeudores.length === 0 && <li className="py-4 text-center text-sm text-slate-500">Nadie debe nada. 🎉</li>}
-            </ul>
-          </section>}
+          {d.dinero && d.honorarios.deudaTotal !== null && (
+            <section>
+              <div className="mb-4 flex items-baseline justify-between gap-4">
+                <h2 className="titulo-seccion">Mayores deudores</h2>
+                <Link to="/honorarios" className="enlace text-[14px]">Ver todos</Link>
+              </div>
+              <ul className="divide-y border-y">
+                {d.honorarios.topDeudores.map((x) => (
+                  <li key={x.clienteId} className="flex flex-wrap items-baseline gap-x-4 gap-y-1 py-3">
+                    <Link className="enlace min-w-0 flex-1" to={`/clientes/${x.clienteId}`}>{x.clienteNombre}</Link>
+                    <span className="text-[14px] text-machine">{x.cantidad} {x.cantidad === 1 ? 'período' : 'períodos'}</span>
+                    <span className="font-tecnica tabular-nums">{pesos(x.saldo)}</span>
+                  </li>
+                ))}
+                {d.honorarios.topDeudores.length === 0 && <li className="py-6 text-[14px] text-machine">Nadie debe nada.</li>}
+              </ul>
+            </section>
+          )}
           {d.dinero && usuario.rol === 'ADMIN' && (
-            <p className="text-xs text-slate-500">
-              ¿Los totales no coinciden? <button className="text-blue-700 hover:underline disabled:opacity-50" onClick={recalcular} disabled={recalculando}>{recalculando ? 'Recalculando…' : 'Recalcular totales'}</button>
+            <p className="text-[13px] text-machine">
+              ¿Los totales no coinciden? <button className="enlace disabled:opacity-50" onClick={recalcular} disabled={recalculando}>{recalculando ? 'Recalculando…' : 'Recalcular totales'}</button>
             </p>
           )}
         </>

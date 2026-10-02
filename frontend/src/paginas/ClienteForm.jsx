@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { api, ErrorApi } from '../api';
 import { useAuth } from '../auth';
+import Alerta from '../componentes/Alerta';
 
 const VACIO = {
   razonSocial: '', cuit: '', email: '', telefono: '', direccion: '', ciudad: '', notas: '',
@@ -14,7 +15,7 @@ function Campo({ etiqueta, error, children }) {
     <div>
       <label className="etiqueta-label">{etiqueta}</label>
       {children}
-      {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+      {error && <p className="mt-1 text-xs text-figure">{error}</p>}
     </div>
   );
 }
@@ -64,8 +65,8 @@ export default function ClienteForm() {
   }
 
   return (
-    <form onSubmit={guardar} className="space-y-4 rounded-lg border bg-white p-4 sm:p-6">
-      <h1 className="text-xl font-semibold">{id ? 'Editar cliente' : 'Nuevo cliente'}</h1>
+    <form onSubmit={guardar} className="space-y-4 panel">
+      <h1 className="titulo-pagina">{id ? 'Editar cliente' : 'Nuevo cliente'}</h1>
       <div className="grid gap-4 sm:grid-cols-2">
         <Campo etiqueta="Nombre / Razón social *" error={err('razonSocial')}>
           <input className="campo" required value={f.razonSocial} onChange={set('razonSocial')} />
@@ -108,7 +109,7 @@ export default function ClienteForm() {
         <div className="sm:col-span-2">
           <label className="flex items-start gap-2 text-sm">
             <input type="checkbox" className="mt-0.5" checked={f.recordatorios !== false} onChange={(e) => setF({ ...f, recordatorios: e.target.checked })} />
-            <span>Enviarle recordatorios por email de vencimientos y honorarios pendientes <span className="text-slate-500">(solo si tiene email y el administrador activó los recordatorios en <em>Avisos</em>)</span></span>
+            <span>Enviarle recordatorios por email de vencimientos y honorarios pendientes <span className="text-machine">(solo si tiene email y el administrador activó los recordatorios en <em>Avisos</em>)</span></span>
           </label>
         </div>
         {usuario.verDinero && (
@@ -127,12 +128,12 @@ export default function ClienteForm() {
         <div className="sm:col-span-2">
           <label className="etiqueta-label">Obligaciones impositivas (generan los vencimientos del calendario)</label>
           {catalogo.length === 0 ? (
-            <p className="text-sm text-slate-500">Carga primero un calendario en la sección <Link className="text-blue-700 hover:underline" to="/calendario">Calendario</Link> para poder marcar las obligaciones.</p>
+            <p className="text-sm text-machine">Carga primero un calendario en la sección <Link className="enlace" to="/calendario">Calendario</Link> para poder marcar las obligaciones.</p>
           ) : (
-            <div className="max-h-64 overflow-y-auto rounded-md border border-slate-300 p-2">
+            <div className="max-h-64 overflow-y-auto rounded-panel border p-3">
               {catalogo.map((o, i) => (
                 <div key={o.clave}>
-                  {o.seccion !== catalogo[i - 1]?.seccion && <p className="mt-1 text-xs font-semibold uppercase text-slate-500">{o.seccion}</p>}
+                  {o.seccion !== catalogo[i - 1]?.seccion && <p className="mt-1 text-xs font-medium uppercase text-machine">{o.seccion}</p>}
                   <label className="flex items-center gap-2 py-0.5 text-sm">
                     <input type="checkbox" checked={f.obligaciones.includes(o.clave)}
                       onChange={(e) => setF({ ...f, obligaciones: e.target.checked ? [...f.obligaciones, o.clave] : f.obligaciones.filter((x) => x !== o.clave) })} />
@@ -149,7 +150,7 @@ export default function ClienteForm() {
           </Campo>
         </div>
       </div>
-      {errorGeneral && <p role="alert" className="text-sm text-red-600">{errorGeneral}</p>}
+      {errorGeneral && <Alerta tipo="error">{errorGeneral}</Alerta>}
       <div className="flex gap-2">
         <button className="btn-primario">Guardar</button>
         <Link to={id ? `/clientes/${id}` : '/clientes'} className="btn-sec">Cancelar</Link>

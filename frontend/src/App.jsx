@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Navigate, Route, Routes, NavLink } from 'react-router-dom';
 import { api } from './api';
+import Marca from './componentes/Marca';
 import { useAuth } from './auth';
 import Login from './paginas/Login';
 import Clientes from './paginas/Clientes';
@@ -27,18 +28,21 @@ function Layout({ children }) {
     window.addEventListener('alertas', cargar);
     return () => { clearInterval(t); window.removeEventListener('alertas', cargar); };
   }, []);
+  // Navegación técnica: mayúsculas de 14 px con +0.28 px de tracking; la sección activa va subrayada
   const enlace = ({ isActive }) =>
-    `rounded px-3 py-1.5 text-sm ${isActive ? 'bg-blue-100 text-blue-700' : 'text-slate-600 hover:bg-slate-100'}`;
+    `tecnica inline-flex items-center border-b-2 py-2 text-[14px] leading-none transition-colors ${isActive ? 'border-figure text-figure' : 'border-transparent text-machine hover:text-figure'}`;
   return (
     <>
-      <header className="border-b bg-white">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-2 px-4 py-3">
-          <span className="mr-4 font-semibold">Estudio Contable</span>
-          <nav className="flex flex-wrap gap-1">
+      <header className="border-b border-regla bg-white">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-8 gap-y-2 px-4 py-3 sm:px-8 sm:py-4">
+          <NavLink to="/inicio" className="tecnica mr-1 inline-flex items-center gap-2 text-[14px] leading-none text-figure" aria-label="Estudio Contable, ir al inicio">
+            <Marca /> Estudio Contable
+          </NavLink>
+          <nav className="flex flex-wrap gap-x-6 gap-y-1">
             <NavLink to="/inicio" className={enlace}>Inicio</NavLink>
             <NavLink to="/agenda" className={enlace}>
               Agenda
-              {urgentes > 0 && <span className="ml-1.5 rounded-full bg-red-600 px-1.5 py-0.5 text-xs text-white" aria-label={`${urgentes} urgentes`}>{urgentes}</span>}
+              {urgentes > 0 && <span className="ml-2 inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-figure px-1.5 text-[11px] leading-none text-white" aria-label={`${urgentes} urgentes`}>{urgentes}</span>}
             </NavLink>
             <NavLink to="/clientes" className={enlace}>Clientes</NavLink>
             {usuario.verDinero && <NavLink to="/honorarios" className={enlace}>Honorarios</NavLink>}
@@ -46,20 +50,20 @@ function Layout({ children }) {
             {usuario.rol === 'ADMIN' && <NavLink to="/avisos" className={enlace}>Avisos</NavLink>}
             {usuario.rol === 'ADMIN' && <NavLink to="/usuarios" className={enlace}>Usuarios</NavLink>}
           </nav>
-          <div className="ml-auto flex items-center gap-3 text-sm">
-            <NavLink to="/cuenta" className="text-slate-500 hover:underline">{usuario.nombre}</NavLink>
-            <button className="btn-sec" onClick={logout}>Salir</button>
+          <div className="ml-auto flex items-center gap-4 text-[14px]">
+            <NavLink to="/cuenta" className="enlace-tenue">{usuario.nombre}</NavLink>
+            <button className="btn-sec btn-sm" onClick={logout}>Salir</button>
           </div>
         </div>
       </header>
-      <main className="mx-auto max-w-6xl px-4 py-6">{children}</main>
+      <main className="mx-auto max-w-6xl px-4 py-8 sm:px-8 sm:py-10">{children}</main>
     </>
   );
 }
 
 export default function App() {
   const { usuario } = useAuth();
-  if (usuario === undefined) return <p className="p-6 text-slate-500">Cargando…</p>;
+  if (usuario === undefined) return <p className="p-6 text-machine">Cargando…</p>;
   if (!usuario) return <Login />;
   return (
     <Layout>

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../api';
 import Estado from '../componentes/Estado';
 import { useAuth } from '../auth';
+import Alerta from '../componentes/Alerta';
 
 const COLUMNAS = [
   ['razonSocial', 'Razón social'],
@@ -54,7 +55,7 @@ export default function Clientes() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">Clientes <span className="text-sm font-normal text-slate-500">({resultado.total})</span></h1>
+        <h1 className="titulo-pagina">Clientes <span className="text-sm font-normal text-machine">({resultado.total})</span></h1>
         <div className="flex gap-2">
           {usuario.rol === 'ADMIN' && <Link to="/importar" className="btn-sec">Importar desde Excel</Link>}
           <Link to="/clientes/nuevo" className="btn-primario">+ Nuevo cliente</Link>
@@ -79,11 +80,11 @@ export default function Clientes() {
         </select>
       </div>
 
-      {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
+      {error && <Alerta tipo="error">{error}</Alerta>}
 
-      <div className="overflow-x-auto rounded-lg border bg-white">
+      <div className="overflow-x-auto panel-plano">
         <table className="w-full text-left text-sm">
-          <thead className="border-b bg-slate-50 text-xs uppercase text-slate-500">
+          <thead className="encabezado-tabla">
             <tr>
               {COLUMNAS.map(([campo, titulo]) => (
                 <th key={campo} className="cursor-pointer select-none whitespace-nowrap px-3 py-2" onClick={() => ordenarPor(campo)}>
@@ -94,8 +95,8 @@ export default function Clientes() {
           </thead>
           <tbody className="divide-y">
             {resultado.datos.map((c) => (
-              <tr key={c.id} className="hover:bg-slate-50">
-                <td className="px-3 py-2 font-medium"><Link className="text-blue-700 hover:underline" to={`/clientes/${c.id}`}>{c.razonSocial}</Link></td>
+              <tr key={c.id} >
+                <td className="px-3 py-2 font-medium"><Link className="enlace" to={`/clientes/${c.id}`}>{c.razonSocial}</Link></td>
                 <td className="px-3 py-2">{c.cuit}</td>
                 <td className="px-3 py-2">{c.email}</td>
                 <td className="px-3 py-2">{c.telefono}</td>
@@ -104,15 +105,15 @@ export default function Clientes() {
               </tr>
             ))}
             {resultado.datos.length === 0 && (
-              <tr><td colSpan={6} className="px-3 py-8 text-center text-slate-500">No hay clientes que coincidan.</td></tr>
+              <tr><td colSpan={6} className="px-3 py-8 text-center text-machine">No hay clientes que coincidan.</td></tr>
             )}
           </tbody>
         </table>
       </div>
 
-      <p className="text-sm text-slate-600">
+      <p className="text-sm text-machine">
         Exportar los {resultado.total} clientes de esta lista:{' '}
-        <a className="text-blue-700 hover:underline" href={exportar('xlsx')}>Excel</a> · <a className="text-blue-700 hover:underline" href={exportar('csv')}>CSV</a>
+        <a className="enlace" href={exportar('xlsx')}>Excel</a> · <a className="enlace" href={exportar('csv')}>CSV</a>
       </p>
 
       <div className="flex items-center justify-between text-sm">

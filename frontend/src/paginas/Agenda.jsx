@@ -3,16 +3,9 @@ import { Link } from 'react-router-dom';
 import { api } from '../api';
 import { verFecha } from '../fechas';
 import Situacion from '../componentes/Situacion';
+import Dato from '../componentes/Dato';
 import { FilaTarea, FormularioTarea, avisarAlertas, textoAviso, useEquipo } from '../componentes/Tareas';
-
-function Resumen({ titulo, valor, color }) {
-  return (
-    <div className="rounded-lg border bg-white p-3">
-      <p className="text-xs text-slate-500">{titulo}</p>
-      <p className={`text-2xl font-semibold ${valor ? color : 'text-slate-400'}`}>{valor}</p>
-    </div>
-  );
-}
+import Alerta from '../componentes/Alerta';
 
 export default function Agenda() {
   const [tareas, setTareas] = useState([]);
@@ -41,7 +34,7 @@ export default function Agenda() {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-xl font-semibold">Agenda</h1>
+        <h1 className="titulo-pagina">Agenda</h1>
         <label className="flex items-center gap-2 text-sm">
           Mostrar vencido y próximos
           <select className="campo w-28" value={dias} onChange={(e) => setDias(Number(e.target.value))}>
@@ -51,18 +44,18 @@ export default function Agenda() {
           </select>
         </label>
       </div>
-      {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
+      {error && <Alerta tipo="error">{error}</Alerta>}
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Resumen titulo="Tareas vencidas" valor={cuenta(tareas, 'VENCIDA')} color="text-red-600" />
-        <Resumen titulo="Tareas para hoy" valor={cuenta(tareas, 'HOY')} color="text-orange-600" />
-        <Resumen titulo="Vencimientos vencidos" valor={cuenta(venc, 'VENCIDA')} color="text-red-600" />
-        <Resumen titulo="Vencen pronto" valor={cuenta(venc, 'HOY') + cuenta(venc, 'PROXIMA')} color="text-amber-600" />
+      <div className="grid grid-cols-2 gap-x-8 lg:grid-cols-4">
+        <Dato titulo="Tareas vencidas" valor={cuenta(tareas, 'VENCIDA')} destacado={cuenta(tareas, 'VENCIDA') > 0} />
+        <Dato titulo="Tareas para hoy" valor={cuenta(tareas, 'HOY')} destacado={cuenta(tareas, 'HOY') > 0} />
+        <Dato titulo="Vencimientos vencidos" valor={cuenta(venc, 'VENCIDA')} destacado={cuenta(venc, 'VENCIDA') > 0} />
+        <Dato titulo="Vencen pronto" valor={cuenta(venc, 'HOY') + cuenta(venc, 'PROXIMA')} destacado={cuenta(venc, 'HOY') + cuenta(venc, 'PROXIMA') > 0} />
       </div>
 
-      <section className="space-y-3 rounded-lg border bg-white p-4 sm:p-6">
+      <section className="space-y-3 panel">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="font-semibold">Tareas pendientes</h2>
+          <h2 className="titulo-seccion">Tareas pendientes</h2>
           <div className="flex flex-wrap items-center gap-2">
             <select className="campo w-44" value={responsable} onChange={(e) => setResponsable(e.target.value)} aria-label="Ver tareas de">
               <option value="yo">Mis tareas</option>
@@ -73,7 +66,7 @@ export default function Agenda() {
           </div>
         </div>
         {creando && <FormularioTarea equipo={equipo} alGuardar={guardado} alCancelar={() => setCreando(false)} />}
-        {msg && <p role="status" className="text-sm text-green-700">{msg}</p>}
+        {msg && <Alerta tipo="ok">{msg}</Alerta>}
         <ul className="divide-y">
           {tareas.map((t) => (
             <li key={t.id} className="space-y-2 py-2">
@@ -82,31 +75,31 @@ export default function Agenda() {
               {editando === t.id && <FormularioTarea tarea={t} equipo={equipo} alGuardar={guardado} alCancelar={() => setEditando(null)} />}
             </li>
           ))}
-          {tareas.length === 0 && <li className="py-4 text-center text-sm text-slate-500">No hay tareas pendientes en este período. 🎉</li>}
+          {tareas.length === 0 && <li className="py-4 text-center text-sm text-machine">No hay tareas pendientes en este período. 🎉</li>}
         </ul>
       </section>
 
-      <section className="space-y-3 rounded-lg border bg-white p-4 sm:p-6">
-        <h2 className="font-semibold">Vencimientos impositivos pendientes</h2>
-        <p className="text-sm text-slate-600">
-          Los vencimientos del mes se generan desde el <Link className="text-blue-700 hover:underline" to="/calendario">Calendario impositivo</Link>.
+      <section className="space-y-3 panel">
+        <h2 className="titulo-seccion">Vencimientos impositivos pendientes</h2>
+        <p className="text-sm text-machine">
+          Los vencimientos del mes se generan desde el <Link className="enlace" to="/calendario">Calendario impositivo</Link>.
         </p>
         <ul className="divide-y">
           {venc.map((v) => (
             <li key={v.id} className="flex items-center gap-3 py-2 text-sm">
               <div className="flex-1">
-                {v.impuesto} <span className="text-slate-500">· {v.periodo}</span>
-                <span className="block text-xs text-slate-500">
-                  <Link className="text-blue-700 hover:underline" to={`/clientes/${v.clienteId}`}>{v.clienteNombre}</Link>
+                {v.impuesto} <span className="text-machine">· {v.periodo}</span>
+                <span className="block text-xs text-machine">
+                  <Link className="enlace" to={`/clientes/${v.clienteId}`}>{v.clienteNombre}</Link>
                   {' · vence '}{verFecha(v.vence)}
                 </span>
               </div>
               <Situacion valor={v.situacion} />
-              <button className="btn-sec" onClick={() => presentar(v)}>Presentado</button>
+              <button className="btn-sec btn-sm" onClick={() => presentar(v)}>Presentado</button>
             </li>
           ))}
-          {venc.length === 0 && <li className="py-4 text-center text-sm text-slate-500">No hay vencimientos pendientes en este período.</li>}
-          {venc.length >= 500 && <li className="py-3 text-center text-xs text-amber-700">Se muestran los primeros 500; reduce el período para ver el resto.</li>}
+          {venc.length === 0 && <li className="py-4 text-center text-sm text-machine">No hay vencimientos pendientes en este período.</li>}
+          {venc.length >= 500 && <li className="py-3 text-center text-xs text-figure">Se muestran los primeros 500; reduce el período para ver el resto.</li>}
         </ul>
       </section>
     </div>

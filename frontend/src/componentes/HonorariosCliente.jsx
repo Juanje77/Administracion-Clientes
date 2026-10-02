@@ -3,6 +3,7 @@ import { api } from '../api';
 import { useAuth } from '../auth';
 import { mesActual, pesos } from '../formato';
 import { CobroForm, EstadoCobro, ListaCobros } from './Cobros';
+import Alerta from './Alerta';
 
 export default function HonorariosCliente({ clienteId, abonoMensual }) {
   const { usuario } = useAuth();
@@ -33,12 +34,12 @@ export default function HonorariosCliente({ clienteId, abonoMensual }) {
   const terminado = () => { setAbierto(null); cargar(); };
 
   return (
-    <section className="rounded-lg border bg-white p-4 sm:p-6">
+    <section className="panel">
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="font-semibold">Honorarios y cobros</h2>
+        <h2 className="titulo-seccion">Honorarios y cobros</h2>
         <p className="text-sm">
-          Saldo pendiente: <strong className={datos.totales.saldo > 0 ? 'text-red-600' : 'text-green-700'}>{pesos(datos.totales.saldo)}</strong>
-          {abonoMensual > 0 && <span className="ml-3 text-slate-500">Abono mensual: {pesos(abonoMensual)}</span>}
+          Saldo pendiente: <strong className={datos.totales.saldo > 0 ? 'text-figure' : 'text-figure'}>{pesos(datos.totales.saldo)}</strong>
+          {abonoMensual > 0 && <span className="ml-3 text-machine">Abono mensual: {pesos(abonoMensual)}</span>}
         </p>
       </div>
 
@@ -48,26 +49,26 @@ export default function HonorariosCliente({ clienteId, abonoMensual }) {
         <input className="campo" required type="number" step="0.01" min="0.01" placeholder="Monto" value={f.monto} onChange={(e) => setF({ ...f, monto: e.target.value })} aria-label="Monto" />
         <button className="btn-primario">Agregar</button>
       </form>
-      {error && <p role="alert" className="mb-2 text-sm text-red-600">{error}</p>}
+      {error && <Alerta tipo="error">{error}</Alerta>}
 
       <ul className="divide-y">
         {datos.datos.map((h) => (
           <li key={h.id} className="space-y-2 py-2 text-sm">
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
               <div className="min-w-0 flex-1">
-                <p>{h.concepto} <span className="text-slate-500">· {h.periodo}</span></p>
-                <p className="text-xs text-slate-500">Facturado {pesos(h.monto)} · cobrado {pesos(h.pagado)} · saldo {pesos(h.saldo)}</p>
+                <p>{h.concepto} <span className="text-machine">· {h.periodo}</span></p>
+                <p className="text-xs text-machine">Facturado {pesos(h.monto)} · cobrado {pesos(h.pagado)} · saldo {pesos(h.saldo)}</p>
               </div>
               <EstadoCobro honorario={h} />
-              {h.saldo > 0 && <button className="btn-primario" onClick={() => setAbierto(abierto?.id === h.id && abierto.modo === 'cobrar' ? null : { id: h.id, modo: 'cobrar' })}>Cobrar</button>}
-              {h.pagado > 0 && <button className="btn-sec" onClick={() => setAbierto(abierto?.id === h.id && abierto.modo === 'ver' ? null : { id: h.id, modo: 'ver' })}>Cobros</button>}
-              {usuario.rol === 'ADMIN' && <button className="text-xs text-red-600 hover:underline" onClick={() => borrar(h)}>Borrar</button>}
+              {h.saldo > 0 && <button className="btn-primario btn-sm" onClick={() => setAbierto(abierto?.id === h.id && abierto.modo === 'cobrar' ? null : { id: h.id, modo: 'cobrar' })}>Cobrar</button>}
+              {h.pagado > 0 && <button className="btn-sec btn-sm" onClick={() => setAbierto(abierto?.id === h.id && abierto.modo === 'ver' ? null : { id: h.id, modo: 'ver' })}>Cobros</button>}
+              {usuario.rol === 'ADMIN' && <button className="text-xs enlace-tenue" onClick={() => borrar(h)}>Borrar</button>}
             </div>
             {abierto?.id === h.id && abierto.modo === 'cobrar' && <CobroForm honorario={h} alGuardar={terminado} alCancelar={() => setAbierto(null)} />}
             {abierto?.id === h.id && abierto.modo === 'ver' && <ListaCobros honorario={h} alCambiar={terminado} />}
           </li>
         ))}
-        {datos.datos.length === 0 && <li className="py-4 text-center text-sm text-slate-500">Sin honorarios cargados.</li>}
+        {datos.datos.length === 0 && <li className="py-4 text-center text-sm text-machine">Sin honorarios cargados.</li>}
       </ul>
     </section>
   );

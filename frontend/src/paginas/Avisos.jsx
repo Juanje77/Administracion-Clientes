@@ -1,15 +1,16 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api';
+import Alerta from '../componentes/Alerta';
 
 const TIPOS = { equipo: 'Resumen al equipo', 'cliente-deuda': 'Recordatorio de deuda', 'cliente-vencimientos': 'Recordatorio de vencimientos' };
-const ESTADO = { enviado: ['Enviado', 'bg-green-100 text-green-700'], error: ['Error', 'bg-red-100 text-red-700'], enviando: ['Enviando', 'bg-amber-100 text-amber-800'] };
+const ESTADO = { enviado: ['Enviado', 'insignia-gris'], error: ['Error', 'insignia-negra'], enviando: ['Enviando', 'insignia-linea'] };
 const fecha = (d) => new Date(d).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' });
 
 function Interruptor({ checked, onChange, titulo, detalle }) {
   return (
-    <label className="flex items-start gap-3 rounded-md border p-3 text-sm">
+    <label className="flex items-start gap-3 rounded-panel border p-4 text-sm">
       <input type="checkbox" className="mt-1 h-4 w-4" checked={checked} onChange={(e) => onChange(e.target.checked)} />
-      <span><strong className="block">{titulo}</strong><span className="text-slate-600">{detalle}</span></span>
+      <span><strong className="block">{titulo}</strong><span className="text-machine">{detalle}</span></span>
     </label>
   );
 }
@@ -48,15 +49,15 @@ export default function Avisos() {
     if (r) { setVista(null); cargar(); }
   }
 
-  if (!config) return msg ? <p role="alert" className="text-red-600">{msg.texto}</p> : <p className="text-slate-500">Cargando…</p>;
+  if (!config) return msg ? <Alerta tipo="error">{msg.texto}</Alerta> : <p className="text-machine">Cargando…</p>;
   const cambiar = (k) => (v) => setConfig({ ...config, [k]: v });
   const sinCorreo = !datos.correo.configurado;
 
   return (
     <div className="space-y-6">
-      <h1 className="text-xl font-semibold">Avisos por email</h1>
+      <h1 className="titulo-pagina">Avisos por email</h1>
 
-      <section className={`rounded-lg border p-4 text-sm ${sinCorreo ? 'border-amber-300 bg-amber-50 text-amber-900' : 'border-green-300 bg-green-50 text-green-900'}`}>
+      <section className={`rounded-panel border p-4 text-sm ${sinCorreo ? 'border-figure bg-figure/5' : ''}`}>
         {sinCorreo ? (
           <p><strong>El correo todavía no está configurado.</strong> Faltan las variables <code>SMTP_USER</code> y <code>SMTP_PASS</code> en el servidor (ver README, sección “Avisos por email”). Mientras tanto puedes ver la vista previa, pero no enviar.</p>
         ) : (
@@ -65,8 +66,8 @@ export default function Avisos() {
         <p className="mt-1">{datos.cron.configurado ? 'El envío automático diario está habilitado (de lunes a viernes, 8:00 hs).' : 'El envío automático diario no está habilitado: falta la variable CRON_SECRET. Puedes enviar manualmente con “Enviar ahora”.'}</p>
       </section>
 
-      <section className="space-y-3 rounded-lg border bg-white p-4 sm:p-6">
-        <h2 className="font-semibold">Qué se envía</h2>
+      <section className="space-y-3 panel">
+        <h2 className="titulo-seccion">Qué se envía</h2>
         <Interruptor checked={config.equipoActivo} onChange={cambiar('equipoActivo')} titulo="Resumen diario al equipo"
           detalle="Cada integrante recibe sus tareas y los vencimientos pendientes; los administradores, también los deudores. Solo se envía si hay algo pendiente. Cada persona puede desactivarlo en “Mi cuenta”." />
         <Interruptor checked={config.clientesVencimientos} onChange={cambiar('clientesVencimientos')} titulo="Recordatorio de vencimientos a los clientes"
@@ -85,28 +86,28 @@ export default function Avisos() {
             </label>
           </div>
         )}
-        <p className="text-xs text-slate-500">Los clientes solo reciben avisos si están <strong>activos</strong>, tienen <strong>email</strong> y su casilla de recordatorios está marcada (en la ficha de cada cliente).</p>
+        <p className="text-xs text-machine">Los clientes solo reciben avisos si están <strong>activos</strong>, tienen <strong>email</strong> y su casilla de recordatorios está marcada (en la ficha de cada cliente).</p>
         <button className="btn-primario" onClick={guardar} disabled={ocupado === 'guardar'}>Guardar configuración</button>
       </section>
 
-      {msg && <p role={msg.ok ? 'status' : 'alert'} className={`text-sm ${msg.ok ? 'text-green-700' : 'text-red-600'}`}>{msg.texto}</p>}
+      {msg && <Alerta tipo={msg.ok ? 'ok' : 'error'}>{msg.texto}</Alerta>}
 
-      <section className="space-y-3 rounded-lg border bg-white p-4 sm:p-6">
-        <h2 className="font-semibold">Probar antes de enviar</h2>
+      <section className="space-y-3 panel">
+        <h2 className="titulo-seccion">Probar antes de enviar</h2>
         <div className="flex flex-wrap gap-2">
           <button className="btn-sec" onClick={prueba} disabled={sinCorreo || !!ocupado}>Enviarme un correo de prueba</button>
           <button className="btn-sec" onClick={previa} disabled={!!ocupado}>Ver qué se enviaría hoy</button>
           <button className="btn-primario" onClick={ejecutar} disabled={sinCorreo || !!ocupado}>Enviar ahora</button>
         </div>
-        <p className="text-xs text-slate-500">La configuración que ves arriba debe estar <em>guardada</em> para que la vista previa y el envío la usen.</p>
+        <p className="text-xs text-machine">La configuración que ves arriba debe estar <em>guardada</em> para que la vista previa y el envío la usen.</p>
         {vista && (
-          <div className="rounded border bg-slate-50 p-3 text-sm">
+          <div className="rounded-panel border p-4 text-sm">
             <p className="font-medium">Hoy se enviarían {vista.total} correos {vista.total === 0 && '(nada pendiente)'}</p>
             <ul className="mt-2 divide-y">
               {vista.mensajes.map((m, i) => (
                 <li key={i} className="py-1.5">
-                  <span className="font-medium">{m.destino}</span> <span className="text-slate-500">&lt;{m.to}&gt;</span>
-                  <span className="block text-xs text-slate-500">{TIPOS[m.tipo]} · {m.detalle}</span>
+                  <span className="font-medium">{m.destino}</span> <span className="text-machine">&lt;{m.to}&gt;</span>
+                  <span className="block text-xs text-machine">{TIPOS[m.tipo]} · {m.detalle}</span>
                 </li>
               ))}
             </ul>
@@ -114,18 +115,18 @@ export default function Avisos() {
         )}
       </section>
 
-      <section className="rounded-lg border bg-white p-4 sm:p-6">
-        <h2 className="mb-3 font-semibold">Últimos envíos</h2>
+      <section className="panel">
+        <h2 className="titulo-seccion mb-3">Últimos envíos</h2>
         <ul className="divide-y text-sm">
           {historial.map((h) => (
             <li key={h.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2">
-              <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${ESTADO[h.estado]?.[1]}`}>{ESTADO[h.estado]?.[0] ?? h.estado}</span>
-              <span className="min-w-0 flex-1"><span className="font-medium">{h.destino}</span> <span className="text-slate-500">· {TIPOS[h.tipo] ?? h.tipo}</span>
-                {h.error && <span className="block text-xs text-red-600">{h.error}</span>}</span>
-              <span className="text-xs text-slate-500">{fecha(h.creadoEn)}</span>
+              <span className={ESTADO[h.estado]?.[1]}>{ESTADO[h.estado]?.[0] ?? h.estado}</span>
+              <span className="min-w-0 flex-1"><span className="font-medium">{h.destino}</span> <span className="text-machine">· {TIPOS[h.tipo] ?? h.tipo}</span>
+                {h.error && <span className="block text-xs text-figure">{h.error}</span>}</span>
+              <span className="text-xs text-machine">{fecha(h.creadoEn)}</span>
             </li>
           ))}
-          {historial.length === 0 && <li className="py-4 text-center text-slate-500">Todavía no se envió ningún aviso.</li>}
+          {historial.length === 0 && <li className="py-4 text-center text-machine">Todavía no se envió ningún aviso.</li>}
         </ul>
       </section>
     </div>

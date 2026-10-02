@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api';
 import { useAuth } from '../auth';
+import Alerta from './Alerta';
 
 const CATEGORIAS = { CONTRATO: 'Contrato', PRESUPUESTO: 'Presupuesto', FACTURA: 'Factura', CONSTANCIA: 'Constancia', BALANCE: 'Balance', OTRO: 'Otro' };
 const MAX_MB = 4;
@@ -41,8 +42,8 @@ export default function DocumentosCliente({ clienteId }) {
   }
 
   return (
-    <section className="rounded-lg border bg-white p-4 sm:p-6">
-      <h2 className="mb-3 font-semibold">Documentos</h2>
+    <section className="panel">
+      <h2 className="titulo-seccion mb-3">Documentos</h2>
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <select className="campo w-40" value={categoria} onChange={(e) => setCategoria(e.target.value)} aria-label="Tipo de documento">
           {Object.entries(CATEGORIAS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
@@ -52,23 +53,23 @@ export default function DocumentosCliente({ clienteId }) {
           <input type="file" className="sr-only" disabled={subiendo} onChange={subir}
             accept=".pdf,.png,.jpg,.jpeg,.webp,.heic,.doc,.docx,.xls,.xlsx,.csv,.txt,image/*" />
         </label>
-        <span className="text-xs text-slate-500">PDF, imágenes, Word, Excel · máx. {MAX_MB} MB</span>
+        <span className="text-xs text-machine">PDF, imágenes, Word, Excel · máx. {MAX_MB} MB</span>
       </div>
-      {error && <p role="alert" className="mb-2 text-sm text-red-600">{error}</p>}
+      {error && <Alerta tipo="error">{error}</Alerta>}
 
       <ul className="divide-y">
         {docs.map((d) => (
           <li key={d.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2 text-sm">
             <div className="min-w-0 flex-1">
               <p className="break-words font-medium">{d.nombre}</p>
-              <p className="text-xs text-slate-500">{CATEGORIAS[d.categoria]} · {tamano(d.tamano)} · {fecha(d.creadoEn)} · {d.subidoPorNombre}</p>
+              <p className="text-xs text-machine">{CATEGORIAS[d.categoria]} · {tamano(d.tamano)} · {fecha(d.creadoEn)} · {d.subidoPorNombre}</p>
             </div>
             {SE_VE.test(d.nombre) && <a className="btn-sec" href={`/api/documentos/${d.id}/descargar?ver=1`} target="_blank" rel="noreferrer">Ver</a>}
             <a className="btn-sec" href={`/api/documentos/${d.id}/descargar`}>Descargar</a>
-            {(d.subidoPor === usuario.id || usuario.rol === 'ADMIN') && <button className="text-xs text-red-600 hover:underline" onClick={() => borrar(d)}>Borrar</button>}
+            {(d.subidoPor === usuario.id || usuario.rol === 'ADMIN') && <button className="text-xs enlace-tenue" onClick={() => borrar(d)}>Borrar</button>}
           </li>
         ))}
-        {docs.length === 0 && <li className="py-4 text-center text-sm text-slate-500">Sin documentos.</li>}
+        {docs.length === 0 && <li className="py-4 text-center text-sm text-machine">Sin documentos.</li>}
       </ul>
     </section>
   );
