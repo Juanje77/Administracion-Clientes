@@ -10,6 +10,7 @@
 const { z } = require('zod');
 const { db, aObjeto, errorConfig } = require('../db');
 const { todosLosClientes } = require('../cache');
+const { idsVisibles, visiblePara, comoAcceso } = require('./acceso');
 const { hoy: hoyReal, sumarDias } = require('../util');
 const { deudores: calcularDeudores } = require('./honorarios');
 const { puedeVerDinero } = require('../permisos');
@@ -76,16 +77,19 @@ async function planificar({ hoy: h = hoyReal() } = {}) {
 
   // ---------- Resumen para cada integrante del equipo ----------
   if (cfg.equipoActivo) {
-    const vencimientos = {
-      vencidos: agruparVencimientos(venc.filter((v) => v.vence < h), nombres, h, () => 'venció el'),
-      hoy: agruparVencimientos(venc.filter((v) => v.vence === h), nombres, h, () => 'vence'),
-      proximos: agruparVencimientos(venc.filter((v) => v.vence > h && v.vence <= limite7), nombres, h, () => 'vence el'),
-    };
-    const cuentaVenc = { vencidos: venc.filter((v) => v.vence < h).length, hoy: venc.filter((v) => v.vence === h).length };
     let deuda = null;
     for (const u of usuarios.docs.map(aObjeto)) {
       if (u.avisos === false || !email.safeParse(u.email).success) continue;
-      const mias = tareas.filter((t) => t.asignadoA === u.id).map((t) => ({ ...t, clienteNombre: t.clienteId ? nombres.get(t.clienteId) ?? '(cliente eliminado)' : 'Tarea interna' }));
+      // cada persona recibe solo lo de los clientes que puede ver
+      const ids = await idsVisibles(comoAcceso(u));
+      const vu = ids === null ? venc : venc.filter((v) => visiblePara(ids, v.clienteId));
+      const vencimientos = {
+        vencidos: agruparVencimientos(vu.filter((v) => v.vence < h), nombres, h, () => 'venció el'),
+        hoy: agruparVencimientos(vu.filter((v) => v.vence === h), nombres, h, () => 'vence'),
+        proximos: agruparVencimientos(vu.filter((v) => v.vence > h && v.vence <= limite7), nombres, h, () => 'vence el'),
+      };
+      const cuentaVenc = { vencidos: vu.filter((v) => v.vence < h).length, hoy: vu.filter((v) => v.vence === h).length };
+      const mias = tareas.filter((t) => t.asignadoA === u.id && visiblePara(ids, t.clienteId)).map((t) => ({ ...t, clienteNombre: t.clienteId ? nombres.get(t.clienteId) ?? '(cliente eliminado)' : 'Tarea interna' }));
       const t = {
         vencidas: mias.filter((x) => x.vence < h),
         hoy: mias.filter((x) => x.vence === h),
@@ -93,8 +97,10 @@ async function planificar({ hoy: h = hoyReal() } = {}) {
       };
       let deudores;
       if (puedeVerDinero(u)) {
-        deuda ??= await calcularDeudores();
-        if (deuda.datos.length) deudores = { total: deuda.total, top: deuda.datos.slice(0, 10) };
+        let d;
+        if (ids === null) d = deuda ??= await calcularDeudores();
+        else d = await calcularDeudores(ids);
+        if (d.datos.length) deudores = { total: d.total, top: d.datos.slice(0, 10) };
       }
       const hayAlgo = t.vencidas.length + t.hoy.length + t.proximas.length + vencimientos.vencidos.length + vencimientos.hoy.length + vencimientos.proximos.length > 0 || deudores;
       if (!hayAlgo) continue;

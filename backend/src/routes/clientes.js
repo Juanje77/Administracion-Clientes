@@ -2,10 +2,11 @@ const router = require('express').Router();
 const { db, aObjeto } = require('../db');
 const { borrarDocumentosDeCliente } = require('./documentos');
 const { borrarHonorarios } = require('../servicios/resumenes');
-const { todosLosClientes, invalidar } = require('../cache');
+const { invalidar } = require('../cache');
 const { requiereAdmin } = require('../middleware/auth');
 const { clienteSchema, interaccionSchema } = require('../validacion');
 const { filtrarYOrdenar } = require('../servicios/clientes');
+const { clientesVisibles, puedeVerCliente } = require('../servicios/acceso');
 
 const clientes = () => db.collection('clientes');
 
@@ -18,11 +19,30 @@ const normalizarEtiquetas = (lista = []) => [...new Set(lista.map((n) => n.toLow
 
 // Respuesta de la API: las etiquetas se muestran como objetos { nombre }.
 // El abono mensual es dinero: solo lo ven quienes tienen ese acceso.
-const salida = (c, verDinero) => {
+// Quién puede ver el cliente (responsables) solo lo ve un administrador.
+const salida = (c, usuario) => {
   const out = { ...c, obligaciones: c.obligaciones || [], etiquetas: (c.etiquetas || []).map((nombre) => ({ nombre })) };
-  if (!verDinero) delete out.abonoMensual;
+  if (!usuario.verDinero) delete out.abonoMensual;
+  if (usuario.rol === 'ADMIN') out.responsables = c.responsables || [];
+  else delete out.responsables;
   return out;
 };
+
+// Solo ids de usuarios activos y no administradores (los administradores ven todo, no se asignan).
+async function responsablesValidos(ids) {
+  const unicos = [...new Set(ids)];
+  if (!unicos.length) return [];
+  const docs = await db.getAll(...unicos.map((id) => db.collection('usuarios').doc(id)));
+  const invalidos = unicos.filter((id, i) => !docs[i].exists || docs[i].data().rol === 'ADMIN' || docs[i].data().activo === false);
+  if (invalidos.length) return { error: 'Hay personas que no existen, están desactivadas o son administradoras' };
+  return unicos;
+}
+
+// Un cliente que la persona no puede ver es, para ella, un cliente inexistente.
+router.param('id', async (req, res, next, id) => {
+  if (await puedeVerCliente(req.usuario, id)) return next();
+  res.status(404).json({ error: 'Cliente no encontrado' });
+});
 
 // El CUIT es único: se reserva un documento cuits/{11 dígitos} dentro de una transacción.
 class CuitDuplicado extends Error {}
@@ -31,22 +51,22 @@ const refCuit = (clave) => db.collection('cuits').doc(clave);
 router.get('/', async (req, res) => {
   const pagina = Math.max(1, Number(req.query.pagina) || 1);
   const porPagina = Math.min(100, Math.max(1, Number(req.query.porPagina) || 25));
-  const lista = filtrarYOrdenar(await todosLosClientes(), req.query);
+  const lista = filtrarYOrdenar(await clientesVisibles(req.usuario), req.query);
   res.json({
     total: lista.length,
     pagina,
     porPagina,
-    datos: lista.slice((pagina - 1) * porPagina, pagina * porPagina).map((c) => salida(c, req.usuario.verDinero)),
+    datos: lista.slice((pagina - 1) * porPagina, pagina * porPagina).map((c) => salida(c, req.usuario)),
   });
 });
 
-router.get('/ciudades', async (_req, res) => {
-  const ciudades = new Set((await todosLosClientes()).map((c) => c.ciudad).filter(Boolean));
+router.get('/ciudades', async (req, res) => {
+  const ciudades = new Set((await clientesVisibles(req.usuario)).map((c) => c.ciudad).filter(Boolean));
   res.json([...ciudades].sort((a, b) => a.localeCompare(b, 'es')));
 });
 
-router.get('/etiquetas', async (_req, res) => {
-  const nombres = new Set((await todosLosClientes()).flatMap((c) => c.etiquetas || []));
+router.get('/etiquetas', async (req, res) => {
+  const nombres = new Set((await clientesVisibles(req.usuario)).flatMap((c) => c.etiquetas || []));
   res.json([...nombres].sort().map((nombre) => ({ id: nombre, nombre })));
 });
 
@@ -55,6 +75,14 @@ router.post('/', async (req, res) => {
   if (!r.success) return errorValidacion(res, r.error);
   const { etiquetas, ...datos } = r.data;
   if (!req.usuario.verDinero) delete datos.abonoMensual; // no puede fijar el abono
+  if (req.usuario.rol === 'ADMIN') {
+    const resp = await responsablesValidos(datos.responsables ?? []);
+    if (resp.error) return res.status(400).json({ error: 'Datos inválidos', detalles: { responsables: [resp.error] } });
+    datos.responsables = resp;
+  } else {
+    // quien tiene acceso limitado no se queda sin ver el cliente que acaba de crear
+    datos.responsables = req.usuario.todosLosClientes ? [] : [req.usuario.id];
+  }
   const ahora = new Date();
   const ref = clientes().doc();
   const nuevo = { ...datos, obligaciones: datos.obligaciones ?? [], etiquetas: normalizarEtiquetas(etiquetas), creadoEn: ahora, actualizadoEn: ahora };
@@ -72,13 +100,13 @@ router.post('/', async (req, res) => {
     throw e;
   }
   await invalidar();
-  res.status(201).json(salida({ id: ref.id, ...nuevo }, req.usuario.verDinero));
+  res.status(201).json(salida({ id: ref.id, ...nuevo }, req.usuario));
 });
 
 router.get('/:id', async (req, res) => {
   const doc = await clientes().doc(req.params.id).get();
   if (!doc.exists) return res.status(404).json({ error: 'Cliente no encontrado' });
-  res.json(salida(aObjeto(doc), req.usuario.verDinero));
+  res.json(salida(aObjeto(doc), req.usuario));
 });
 
 router.put('/:id', async (req, res) => {
@@ -87,6 +115,15 @@ router.put('/:id', async (req, res) => {
   const ref = clientes().doc(req.params.id);
   const { etiquetas, ...datos } = r.data;
   if (!req.usuario.verDinero) delete datos.abonoMensual; // conserva el abono que ya tenía
+  if (req.usuario.rol === 'ADMIN') {
+    if (datos.responsables) {
+      const resp = await responsablesValidos(datos.responsables);
+      if (resp.error) return res.status(400).json({ error: 'Datos inválidos', detalles: { responsables: [resp.error] } });
+      datos.responsables = resp;
+    }
+  } else {
+    delete datos.responsables; // solo un administrador cambia quién ve el cliente
+  }
   const claveNueva = claveCuit(datos.cuit);
   try {
     const resultado = await db.runTransaction(async (tx) => {
@@ -106,7 +143,7 @@ router.put('/:id', async (req, res) => {
     });
     if (!resultado) return res.status(404).json({ error: 'Cliente no encontrado' });
     await invalidar();
-    res.json(salida({ id: ref.id, ...resultado }, req.usuario.verDinero));
+    res.json(salida({ id: ref.id, ...resultado }, req.usuario));
   } catch (e) {
     if (e instanceof CuitDuplicado) return res.status(409).json({ error: 'Ya existe un cliente con ese CUIT' });
     throw e;
@@ -135,7 +172,7 @@ router.delete('/:id', async (req, res) => {
   }
   await ref.update({ estado: 'INACTIVO', actualizadoEn: new Date() });
   await invalidar();
-  res.json(salida(aObjeto(await ref.get()), req.usuario.verDinero));
+  res.json(salida(aObjeto(await ref.get()), req.usuario));
 });
 
 // ---- Historial de interacciones (subcolección clientes/{id}/interacciones) ----

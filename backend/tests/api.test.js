@@ -38,7 +38,7 @@ describe('autenticación', () => {
   });
   it('solo admin gestiona usuarios', async () => {
     await user.get('/api/usuarios').expect(403);
-    await admin.post('/api/usuarios').send({ nombre: 'Luis', email: 'luis@t.com', password: 'clave12345' }).expect(201);
+    await admin.post('/api/usuarios').send({ nombre: 'Luis', email: 'luis@t.com', password: 'clave12345', accesoClientes: 'TODOS' }).expect(201);
     await admin.post('/api/usuarios').send({ nombre: 'Luis', email: 'luis@t.com', password: 'clave12345' }).expect(409);
   });
 });
@@ -1107,7 +1107,7 @@ describe('tareas internas, reasignación y aviso por email', () => {
     u.admin = usuarios.find((x) => x.email === 'admin@t.com').id;
     u.ana = usuarios.find((x) => x.email === 'ana@t.com').id;
     u.luis = usuarios.find((x) => x.email === 'luis@t.com').id;
-    const baja = (await admin.post('/api/usuarios').send({ nombre: 'Baja', email: 'baja@t.com', password: 'clave12345' }).expect(201)).body;
+    const baja = (await admin.post('/api/usuarios').send({ nombre: 'Baja', email: 'baja@t.com', password: 'clave12345', accesoClientes: 'TODOS' }).expect(201)).body;
     await admin.patch(`/api/usuarios/${baja.id}`).send({ activo: false }).expect(200);
     u.baja = baja.id;
     u.cliente = (await admin.post('/api/clientes').send({ razonSocial: 'Cliente de las Tareas' }).expect(201)).body.id;
@@ -1247,7 +1247,7 @@ describe('acceso a dinero por usuario', () => {
   beforeAll(async () => {
     for (const col of ['clientes', 'cuits', 'honorarios', 'pagos', 'resumenes', 'tareas', 'vencimientos']) await db.recursiveDelete(db.collection(col));
     await invalidar();
-    const creado = (await admin.post('/api/usuarios').send({ nombre: 'Contable', email: 'contable@t.com', password: 'clave12345' }).expect(201)).body;
+    const creado = (await admin.post('/api/usuarios').send({ nombre: 'Contable', email: 'contable@t.com', password: 'clave12345', accesoClientes: 'TODOS' }).expect(201)).body;
     u.sin = creado.id;
     u.creado = creado;
     sin = await login('contable@t.com', 'clave12345');
@@ -1364,7 +1364,7 @@ describe('acceso a dinero por usuario', () => {
     await admin.patch(`/api/usuarios/${u.sin}`).send({ verDinero: 'si' }).expect(400);
     await admin.patch(`/api/usuarios/${u.admin ?? (await admin.get('/api/auth/me')).body.id}`).send({ verDinero: false }).expect(400); // a sí mismo
     await admin.patch('/api/usuarios/no-existe').send({ verDinero: true }).expect(404);
-    const otro = (await admin.post('/api/usuarios').send({ nombre: 'Socio', email: 'socio@t.com', password: 'clave12345', verDinero: true }).expect(201)).body;
+    const otro = (await admin.post('/api/usuarios').send({ nombre: 'Socio', email: 'socio@t.com', password: 'clave12345', verDinero: true, accesoClientes: 'TODOS' }).expect(201)).body;
     expect(otro.verDinero).toBe(true); // se puede dar acceso al crearlo
     const socio = await login('socio@t.com', 'clave12345');
     await socio.get('/api/honorarios/deudores').expect(200);
@@ -1379,5 +1379,163 @@ describe('acceso a dinero por usuario', () => {
     await request(app).post('/api/auth/login').send({ email: 'contable@t.com', password: 'clave12345' }).expect(401);
     await admin.patch(`/api/usuarios/${u.sin}`).send({ activo: true }).expect(200);
     await sin.get('/api/clientes').expect(200); // reactivado: su sesión vuelve a valer
+  });
+});
+
+describe('permisos por cliente', () => {
+  const { hoy } = require('../src/util');
+  const u = {};
+  let rita, tomas;
+  const nuevoCliente = (agente, razonSocial, extra = {}) => agente.post('/api/clientes').send({ razonSocial, ciudad: 'Ciudad ' + razonSocial, ...extra });
+
+  beforeAll(async () => {
+    // por defecto, quien se crea ve solo los clientes que se le asignen
+    const r = (await admin.post('/api/usuarios').send({ nombre: 'Rita', email: 'rita@t.com', password: 'clave12345', verDinero: true }).expect(201)).body;
+    const t = (await admin.post('/api/usuarios').send({ nombre: 'Tomás', email: 'tomas@t.com', password: 'clave12345' }).expect(201)).body;
+    u.rita = r.id; u.tomas = t.id;
+    expect(r.todosLosClientes).toBe(false);
+    rita = await login('rita@t.com');
+    tomas = await login('tomas@t.com');
+    u.a = (await nuevoCliente(admin, 'Acceso A', { responsables: [u.rita] }).expect(201)).body.id;
+    u.b = (await nuevoCliente(admin, 'Acceso B', { responsables: [u.tomas] }).expect(201)).body.id;
+    u.c = (await nuevoCliente(admin, 'Acceso C').expect(201)).body.id;
+  });
+
+  it('el usuario nuevo es restringido y el que ya existía conserva todo', async () => {
+    expect((await rita.get('/api/auth/me').expect(200)).body.todosLosClientes).toBe(false);
+    expect((await user.get('/api/auth/me').expect(200)).body.todosLosClientes).toBe(true);
+    expect((await admin.get('/api/auth/me').expect(200)).body.todosLosClientes).toBe(true);
+  });
+
+  it('solo ve (y trata como inexistentes) los clientes asignados', async () => {
+    const lista = (await rita.get('/api/clientes').expect(200)).body;
+    expect(lista.datos.map((c) => c.razonSocial)).toEqual(['Acceso A']);
+    expect(lista.datos[0]).not.toHaveProperty('responsables');
+    expect((await rita.get('/api/clientes/ciudades').expect(200)).body).toEqual(['Ciudad Acceso A']);
+    await rita.get(`/api/clientes/${u.a}`).expect(200);
+    await rita.get(`/api/clientes/${u.b}`).expect(404);
+    await rita.put(`/api/clientes/${u.b}`).send({ razonSocial: 'Hack', estado: 'POTENCIAL', etiquetas: [] }).expect(404);
+    await rita.delete(`/api/clientes/${u.b}`).expect(404);
+    await rita.get(`/api/clientes/${u.b}/interacciones`).expect(404);
+    await rita.post(`/api/clientes/${u.b}/interacciones`).send({ tipo: 'LLAMADA', detalle: 'x' }).expect(404);
+    expect((await admin.get('/api/clientes').expect(200)).body.total).toBeGreaterThan(3);
+  });
+
+  it('el administrador ve y cambia los responsables; los demás no', async () => {
+    expect((await admin.get(`/api/clientes/${u.a}`).expect(200)).body.responsables).toEqual([u.rita]);
+    const dato = { razonSocial: 'Acceso A', estado: 'POTENCIAL', etiquetas: [] };
+    // la persona limitada no puede darse acceso a otros clientes ni quitárselo a otros
+    const r = await rita.put(`/api/clientes/${u.a}`).send({ ...dato, responsables: [u.tomas] }).expect(200);
+    expect(r.body).not.toHaveProperty('responsables');
+    expect((await admin.get(`/api/clientes/${u.a}`).expect(200)).body.responsables).toEqual([u.rita]);
+    await admin.put(`/api/clientes/${u.a}`).send({ ...dato, responsables: ['no-existe'] }).expect(400);
+    await admin.put(`/api/clientes/${u.a}`).send({ ...dato, responsables: [u.rita, u.tomas] }).expect(200);
+    await tomas.get(`/api/clientes/${u.a}`).expect(200);
+    await admin.put(`/api/clientes/${u.a}`).send({ ...dato, responsables: [u.rita] }).expect(200);
+    await tomas.get(`/api/clientes/${u.a}`).expect(404);
+  });
+
+  it('el cliente que crea una persona limitada queda a su nombre; el de acceso total, sin responsables', async () => {
+    const d = (await nuevoCliente(rita, 'Creado por Rita', { responsables: [u.tomas] }).expect(201)).body;
+    await rita.get(`/api/clientes/${d.id}`).expect(200);
+    expect((await admin.get(`/api/clientes/${d.id}`).expect(200)).body.responsables).toEqual([u.rita]);
+    await tomas.get(`/api/clientes/${d.id}`).expect(404);
+    const e = (await nuevoCliente(user, 'Creado por Ana').expect(201)).body;
+    expect((await admin.get(`/api/clientes/${e.id}`).expect(200)).body.responsables).toEqual([]);
+    await rita.get(`/api/clientes/${e.id}`).expect(404);
+  });
+
+  it('se asigna también desde la ficha de la persona (mismos datos, otro lado)', async () => {
+    expect((await admin.get(`/api/usuarios/${u.tomas}/clientes`).expect(200)).body.map((c) => c.razonSocial)).toEqual(['Acceso B']);
+    const r = (await admin.put(`/api/usuarios/${u.tomas}/clientes`).send({ clienteIds: [u.b, u.c] }).expect(200)).body;
+    expect(r).toEqual({ asignados: 2, agregados: 1, quitados: 0 });
+    expect((await admin.get(`/api/clientes/${u.c}`).expect(200)).body.responsables).toEqual([u.tomas]);
+    await tomas.get(`/api/clientes/${u.c}`).expect(200);
+    await admin.put(`/api/usuarios/${u.tomas}/clientes`).send({ clienteIds: [u.b] }).expect(200);
+    await tomas.get(`/api/clientes/${u.c}`).expect(404);
+    await admin.put(`/api/usuarios/${u.tomas}/clientes`).send({ clienteIds: ['no-existe'] }).expect(400);
+    await rita.get(`/api/usuarios/${u.tomas}/clientes`).expect(403);
+    await rita.put(`/api/usuarios/${u.tomas}/clientes`).send({ clienteIds: [u.a] }).expect(403);
+  });
+
+  it('no se puede asignar una tarea de un cliente a quien no lo ve', async () => {
+    const base = { clienteId: u.a, titulo: 'Presentar balance', vence: hoy() };
+    const r = await rita.post('/api/tareas').send({ ...base, asignadoA: u.tomas }).expect(400);
+    expect(r.body.detalles.asignadoA[0]).toMatch(/acceso/i);
+    await rita.post('/api/tareas').send({ clienteId: u.b, titulo: 'Ajena', vence: hoy() }).expect(400); // ni sobre un cliente que ella no ve
+    const propia = (await rita.post('/api/tareas').send(base).expect(201)).body;
+    await rita.patch(`/api/tareas/${propia.id}`).send({ asignadoA: u.tomas }).expect(400);
+    // dándole acceso primero, sí
+    await admin.put(`/api/usuarios/${u.tomas}/clientes`).send({ clienteIds: [u.a, u.b] }).expect(200);
+    await rita.patch(`/api/tareas/${propia.id}`).send({ asignadoA: u.tomas }).expect(200);
+    expect((await tomas.get('/api/tareas?asignado=yo').expect(200)).body.map((t) => t.id)).toContain(propia.id);
+    // las tareas internas (sin cliente) se pueden dar a cualquiera
+    await rita.post('/api/tareas').send({ titulo: 'Interna', vence: hoy(), asignadoA: u.tomas }).expect(201);
+    // y quitarle el acceso la saca de su agenda y de las consultas por cliente
+    await admin.put(`/api/usuarios/${u.tomas}/clientes`).send({ clienteIds: [u.b] }).expect(200);
+    expect((await tomas.get('/api/tareas?asignado=yo').expect(200)).body.map((t) => t.id)).not.toContain(propia.id);
+    await tomas.get(`/api/tareas?clienteId=${u.a}`).expect(404);
+    await tomas.patch(`/api/tareas/${propia.id}`).send({ hecha: true }).expect(404);
+  });
+
+  it('vencimientos, agenda y pendientes urgentes solo de sus clientes', async () => {
+    const ayer = require('../src/util').sumarDias(hoy(), -1);
+    const va = (await admin.post('/api/vencimientos').send({ clienteId: u.a, impuesto: 'IVA', periodo: '2020-01', vence: ayer }).expect(201)).body;
+    const vb = (await admin.post('/api/vencimientos').send({ clienteId: u.b, impuesto: 'IVA', periodo: '2020-01', vence: ayer }).expect(201)).body;
+    expect((await rita.get('/api/vencimientos').expect(200)).body.map((v) => v.id)).toEqual([va.id]);
+    await rita.get(`/api/vencimientos?clienteId=${u.b}`).expect(404);
+    await rita.post('/api/vencimientos').send({ clienteId: u.b, impuesto: 'Ganancias', periodo: '2020-02', vence: ayer }).expect(400);
+    await rita.patch(`/api/vencimientos/${vb.id}`).send({ estado: 'PRESENTADO' }).expect(404);
+    await rita.delete(`/api/vencimientos/${vb.id}`).expect(404);
+    const al = (await rita.get('/api/alertas').expect(200)).body;
+    expect(al.vencimientos.vencidos).toBe(1);
+    const todo = (await admin.get('/api/alertas').expect(200)).body;
+    expect(todo.vencimientos.vencidos).toBeGreaterThanOrEqual(2);
+    await rita.post('/api/calendarios/2020-01/aplicar').expect(403);
+  });
+
+  it('honorarios, deudores, documentos, Inicio y exportaciones solo de sus clientes', async () => {
+    const ha = (await admin.post('/api/honorarios').send({ clienteId: u.a, periodo: '2020-03', concepto: 'Balance A', monto: 1000 }).expect(201)).body;
+    const hb = (await admin.post('/api/honorarios').send({ clienteId: u.b, periodo: '2020-03', concepto: 'Balance B', monto: 2000 }).expect(201)).body;
+    const lista = (await rita.get('/api/honorarios').expect(200)).body;
+    expect(lista.datos.map((h) => h.id)).toEqual([ha.id]);
+    expect(lista.totales.saldo).toBe(1000);
+    expect((await rita.get('/api/honorarios/deudores').expect(200)).body.datos.map((d) => d.clienteId)).toEqual([u.a]);
+    await rita.get(`/api/honorarios?clienteId=${u.b}`).expect(404);
+    await rita.post('/api/honorarios').send({ clienteId: u.b, periodo: '2020-04', concepto: 'Otro', monto: 5 }).expect(400);
+    await rita.get(`/api/honorarios/${hb.id}/pagos`).expect(404);
+    await rita.post(`/api/honorarios/${hb.id}/pagos`).send({ monto: 100 }).expect(404);
+    await rita.patch(`/api/honorarios/${hb.id}`).send({ monto: 1 }).expect(404);
+    await rita.post(`/api/honorarios/${ha.id}/pagos`).send({ monto: 100 }).expect(201);
+    await rita.post('/api/honorarios/generar').send({ periodo: '2020-05' }).expect(403);
+    await rita.get(`/api/documentos?clienteId=${u.b}`).expect(404);
+    await rita.get(`/api/documentos?clienteId=${u.a}`).expect(200);
+
+    const d = (await rita.get('/api/dashboard').expect(200)).body;
+    expect(d.dinero).toBe(false); // los totales del estudio no son para quien ve solo algunos clientes
+    expect(d.clientes.total).toBe(2); // Acceso A y Creado por Rita
+    expect(JSON.stringify(d)).not.toMatch(/Balance|deuda/i);
+
+    const csv = (await rita.get('/api/exportar/clientes.csv').expect(200)).text;
+    expect(csv).toContain('Acceso A');
+    expect(csv).not.toContain('Acceso B');
+    await rita.get('/api/exportar/deudores.xlsx').expect(200);
+  });
+
+  it('el resumen por email trae solo lo de sus clientes', async () => {
+    const { planificar } = require('../src/servicios/avisos');
+    const plan = await planificar({ hoy: hoy() });
+    const m = plan.mensajes.find((x) => x.tipo === 'equipo' && x.to === 'rita@t.com');
+    expect(m.html).toContain('Acceso A');
+    expect(m.html).not.toContain('Acceso B');
+  });
+
+  it('pasar a "todos los clientes" (y volver) surte efecto enseguida', async () => {
+    await admin.patch(`/api/usuarios/${u.rita}`).send({ accesoClientes: 'TODOS' }).expect(200);
+    expect((await rita.get('/api/clientes').expect(200)).body.total).toBeGreaterThan(3);
+    expect((await rita.get('/api/auth/me').expect(200)).body.todosLosClientes).toBe(true);
+    await admin.patch(`/api/usuarios/${u.rita}`).send({ accesoClientes: 'ASIGNADOS' }).expect(200);
+    await rita.get(`/api/clientes/${u.b}`).expect(404);
+    expect((await admin.get('/api/usuarios').expect(200)).body.find((x) => x.id === u.rita)).toMatchObject({ todosLosClientes: false });
   });
 });

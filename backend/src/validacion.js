@@ -38,6 +38,8 @@ const clienteSchema = z
     // Honorario mensual pactado (en pesos). Vacío = sin abono.
     // Recordatorios por email a este cliente (solo se envían si el administrador los activa en Avisos).
     recordatorios: z.boolean().optional(),
+    // Personas que pueden ver este cliente (solo lo define un administrador).
+    responsables: z.array(z.string().min(1)).max(100).optional(),
     abonoMensual: z.preprocess((v) => (v === '' || v === undefined ? null : v), z.coerce.number().min(0).max(1e9).nullable()).optional(),
   })
   .superRefine((c, ctx) => {
@@ -64,10 +66,12 @@ const usuarioSchema = z.object({
   rol: z.enum(['ADMIN', 'USUARIO']).default('USUARIO'),
   // Acceso a honorarios, cobros, deudas y montos (los administradores siempre lo tienen).
   verDinero: z.boolean().default(false),
+  // 'ASIGNADOS': solo ve los clientes que se le asignen (por defecto en usuarios nuevos). 'TODOS': ve todos.
+  accesoClientes: z.enum(['TODOS', 'ASIGNADOS']).default('ASIGNADOS'),
 });
 
-const usuarioCambiosSchema = z.object({ activo: z.boolean().optional(), verDinero: z.boolean().optional() })
-  .refine((c) => c.activo !== undefined || c.verDinero !== undefined, 'Nada para cambiar');
+const usuarioCambiosSchema = z.object({ activo: z.boolean().optional(), verDinero: z.boolean().optional(), accesoClientes: z.enum(['TODOS', 'ASIGNADOS']).optional() })
+  .refine((c) => Object.values(c).some((v) => v !== undefined), 'Nada para cambiar');
 
 // Fecha "AAAA-MM-DD" que exista de verdad (rechaza 2026-02-31).
 const fecha = z

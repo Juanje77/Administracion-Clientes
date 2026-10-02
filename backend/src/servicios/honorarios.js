@@ -24,15 +24,16 @@ const totales = (lista) => ({
   saldo: redondear(lista.reduce((t, h) => t + h.saldo, 0)),
 });
 
+// `ids` = clientes que puede ver quien consulta (null = todos)
 // { periodo | clienteId | (nada = todo lo adeudado), estado, q } -> { totales, datos }
-async function consultar({ periodo, clienteId, estado, q } = {}) {
+async function consultar({ periodo, clienteId, estado, q } = {}, ids = null) {
   let consulta = honorarios();
   if (clienteId) consulta = consulta.where('clienteId', '==', String(clienteId));
   else if (periodo) consulta = consulta.where('periodo', '==', String(periodo));
   else consulta = consulta.where('saldo', '>', 0).limit(LIMITE);
 
   const [snap, clientes] = await Promise.all([consulta.get(), mapaClientes()]);
-  let lista = snap.docs.map(aObjeto).map((h) => conEstado(h, clientes));
+  let lista = snap.docs.map(aObjeto).filter((h) => ids === null || ids.has(h.clienteId)).map((h) => conEstado(h, clientes));
   if (['PENDIENTE', 'PARCIAL', 'PAGADO'].includes(estado)) lista = lista.filter((h) => h.estado === estado);
   if (estado === 'DEUDA') lista = lista.filter((h) => h.saldo > 0);
   if (q) lista = lista.filter((h) => plano(h.clienteNombre).includes(plano(q)));
@@ -41,10 +42,10 @@ async function consultar({ periodo, clienteId, estado, q } = {}) {
 }
 
 // Deuda por cliente (todos los períodos), de mayor a menor.
-async function deudores() {
+async function deudores(ids = null) {
   const [snap, clientes] = await Promise.all([honorarios().where('saldo', '>', 0).limit(LIMITE).get(), mapaClientes()]);
   const porCliente = new Map();
-  for (const h of snap.docs.map(aObjeto)) {
+  for (const h of snap.docs.map(aObjeto).filter((x) => ids === null || ids.has(x.clienteId))) {
     const d = porCliente.get(h.clienteId) ?? { clienteId: h.clienteId, clienteNombre: clientes.get(h.clienteId) ?? '(cliente eliminado)', saldo: 0, cantidad: 0, masAntiguo: h.periodo };
     d.saldo = redondear(d.saldo + h.saldo);
     d.cantidad++;

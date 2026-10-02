@@ -1,5 +1,6 @@
 const router = require('express').Router();
 const { db, aObjeto } = require('../db');
+const { idsVisibles, visiblePara, exigirCliente, puedeVerCliente } = require('../servicios/acceso');
 const { vencimientoSchema } = require('../validacion');
 const { hoy, sumarDias, situacion, mapaClientes, porFecha, alertaVencimiento, diasAgenda, LIMITE_AGENDA } = require('../util');
 
@@ -21,11 +22,13 @@ const slug = (t) => t.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().repl
 // lo vencido más lo que vence en los próximos `dias` (7 por defecto).
 router.get('/', async (req, res) => {
   const { clienteId } = req.query;
+  if (clienteId && !(await exigirCliente(req, res, String(clienteId)))) return;
   const consulta = clienteId
     ? vencimientos().where('clienteId', '==', String(clienteId))
     : vencimientos().where('alerta', '<=', sumarDias(hoy(), diasAgenda(req.query.dias))).orderBy('alerta').limit(LIMITE_AGENDA);
   const [snap, clientes] = await Promise.all([consulta.get(), mapaClientes()]);
-  const lista = snap.docs.map(aObjeto).map((v) => salida(v, clientes));
+  const ids = await idsVisibles(req.usuario);
+  const lista = snap.docs.map(aObjeto).filter((v) => visiblePara(ids, v.clienteId)).map((v) => salida(v, clientes));
   lista.sort((a, b) => (a.estado === 'PRESENTADO') - (b.estado === 'PRESENTADO') || porFecha(a, b));
   res.json(lista);
 });
@@ -33,7 +36,7 @@ router.get('/', async (req, res) => {
 router.post('/', async (req, res) => {
   const r = vencimientoSchema.safeParse(req.body);
   if (!r.success) return errorValidacion(res, r.error);
-  if (!(await db.collection('clientes').doc(r.data.clienteId).get()).exists) {
+  if (!(await db.collection('clientes').doc(r.data.clienteId).get()).exists || !(await puedeVerCliente(req.usuario, r.data.clienteId))) {
     return res.status(400).json({ error: 'Datos inválidos', detalles: { clienteId: ['El cliente no existe'] } });
   }
   const id = `${r.data.clienteId}_${slug(r.data.impuesto)}_${r.data.periodo}`;
@@ -54,7 +57,7 @@ router.post('/', async (req, res) => {
 router.patch('/:id', async (req, res) => {
   const ref = vencimientos().doc(req.params.id);
   const actual = await ref.get();
-  if (!actual.exists) return res.status(404).json({ error: 'Vencimiento no encontrado' });
+  if (!actual.exists || !(await puedeVerCliente(req.usuario, actual.data().clienteId))) return res.status(404).json({ error: 'Vencimiento no encontrado' });
   const estado = req.body.estado;
   if (!['PENDIENTE', 'PRESENTADO'].includes(estado)) return res.status(400).json({ error: 'Estado inválido' });
   await ref.update({ estado, presentadoEn: estado === 'PRESENTADO' ? new Date() : null, ...alertaVencimiento({ ...actual.data(), estado }) });
@@ -63,7 +66,8 @@ router.patch('/:id', async (req, res) => {
 
 router.delete('/:id', async (req, res) => {
   const ref = vencimientos().doc(req.params.id);
-  if (!(await ref.get()).exists) return res.status(404).json({ error: 'Vencimiento no encontrado' });
+  const actual = await ref.get();
+  if (!actual.exists || !(await puedeVerCliente(req.usuario, actual.data().clienteId))) return res.status(404).json({ error: 'Vencimiento no encontrado' });
   await ref.delete();
   res.status(204).end();
 });

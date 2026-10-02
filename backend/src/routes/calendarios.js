@@ -78,6 +78,7 @@ router.delete('/:periodo', requiereAdmin, async (req, res) => {
 // Crea (o actualiza, si la fecha cambió y sigue pendiente) los vencimientos de cada cliente
 // activo para las obligaciones que tiene marcadas, según el último dígito de su CUIT.
 router.post('/:periodo/aplicar', async (req, res) => {
+  if (!req.usuario.todosLosClientes) return res.status(403).json({ error: 'Solo quien ve todos los clientes puede aplicar el calendario' });
   if (!periodoValido(req, res)) return;
   const doc = await calendarios().doc(req.params.periodo).get();
   if (!doc.exists) return res.status(404).json({ error: 'Calendario no encontrado' });

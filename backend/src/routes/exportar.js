@@ -1,6 +1,6 @@
 // Descargas: clientes (Excel/CSV), honorarios del mes y deudores (Excel/PDF).
 const router = require('express').Router();
-const { todosLosClientes } = require('../cache');
+const { clientesVisibles, idsVisibles } = require('../servicios/acceso');
 const { filtrarYOrdenar } = require('../servicios/clientes');
 const { consultar, deudores } = require('../servicios/honorarios');
 const { TIPOS } = require('../exportar/tabla');
@@ -24,7 +24,7 @@ async function enviar(res, formato, tabla, nombre, permitidos) {
 
 // Las columnas coinciden con la plantilla de importación: el Excel exportado se puede volver a importar.
 router.get('/clientes.:formato', async (req, res) => {
-  const lista = filtrarYOrdenar(await todosLosClientes(), req.query);
+  const lista = filtrarYOrdenar(await clientesVisibles(req.usuario), req.query);
   const tabla = {
     hoja: 'Clientes',
     columnas: [
@@ -48,7 +48,7 @@ router.get('/clientes.:formato', async (req, res) => {
 router.get('/honorarios.:formato', requiereDinero, async (req, res) => {
   const p = periodoSchema.safeParse(req.query.periodo ?? hoy().slice(0, 7));
   if (!p.success) return res.status(400).json({ error: 'Período inválido (AAAA-MM)' });
-  const { datos, totales } = await consultar({ periodo: p.data, estado: req.query.estado, q: req.query.q });
+  const { datos, totales } = await consultar({ periodo: p.data, estado: req.query.estado, q: req.query.q }, await idsVisibles(req.usuario));
   await enviar(res, req.params.formato, {
     hoja: `Honorarios ${p.data}`,
     titulo: `Honorarios ${p.data}`,
@@ -63,7 +63,7 @@ router.get('/honorarios.:formato', requiereDinero, async (req, res) => {
 });
 
 router.get('/deudores.:formato', requiereDinero, async (req, res) => {
-  const { datos, total } = await deudores();
+  const { datos, total } = await deudores(await idsVisibles(req.usuario));
   await enviar(res, req.params.formato, {
     hoja: 'Deudores',
     titulo: 'Deudores',

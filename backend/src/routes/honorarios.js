@@ -5,6 +5,7 @@ const router = require('express').Router();
 const { db, aObjeto } = require('../db');
 const { todosLosClientes } = require('../cache');
 const { requiereAdmin } = require('../middleware/auth');
+const { idsVisibles, puedeVerCliente, exigirCliente } = require('../servicios/acceso');
 const { honorarioSchema, honorarioCambiosSchema, pagoSchema } = require('../validacion');
 const { hoy, mapaClientes } = require('../util');
 const { honorarios, consultar, deudores, conEstado, redondear } = require('../servicios/honorarios');
@@ -20,13 +21,24 @@ function errorValidacion(res, error) {
 }
 
 // ?periodo=AAAA-MM | ?clienteId=... | (nada = todo lo adeudado). Filtros extra: estado, q.
-router.get('/', async (req, res) => res.json(await consultar(req.query)));
-router.get('/deudores', async (_req, res) => res.json(await deudores()));
+router.get('/', async (req, res) => {
+  if (req.query.clienteId && !(await exigirCliente(req, res, String(req.query.clienteId)))) return;
+  res.json(await consultar(req.query, await idsVisibles(req.usuario)));
+});
+router.get('/deudores', async (req, res) => res.json(await deudores(await idsVisibles(req.usuario))));
+
+// Un honorario de un cliente que no puede ver es, para esta persona, un honorario inexistente.
+router.param('id', async (req, res, next, id) => {
+  if (req.usuario.todosLosClientes) return next();
+  const doc = await honorarios().doc(id).get();
+  if (doc.exists && !(await puedeVerCliente(req.usuario, doc.data().clienteId))) return res.status(404).json({ error: 'Honorario no encontrado' });
+  next();
+});
 
 router.post('/', async (req, res) => {
   const r = honorarioSchema.safeParse(req.body);
   if (!r.success) return errorValidacion(res, r.error);
-  if (!(await db.collection('clientes').doc(r.data.clienteId).get()).exists) {
+  if (!(await db.collection('clientes').doc(r.data.clienteId).get()).exists || !(await puedeVerCliente(req.usuario, r.data.clienteId))) {
     return res.status(400).json({ error: 'Datos inválidos', detalles: { clienteId: ['El cliente no existe'] } });
   }
   const nuevo = { ...r.data, pagado: 0, saldo: r.data.monto, origen: 'manual', creadoPor: req.usuario.id, creadoEn: new Date() };
@@ -40,6 +52,7 @@ router.post('/', async (req, res) => {
 
 // Crea el honorario del mes para cada cliente ACTIVO con abono mensual. No duplica si ya existe.
 router.post('/generar', async (req, res) => {
+  if (!req.usuario.todosLosClientes) return res.status(403).json({ error: 'Solo quien ve todos los clientes puede generar los honorarios del mes' });
   const periodo = String(req.body.periodo || '');
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(periodo)) return res.status(400).json({ error: 'Período inválido (AAAA-MM)' });
   const activos = (await todosLosClientes()).filter((c) => c.estado === 'ACTIVO');

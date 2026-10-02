@@ -4,7 +4,7 @@ const rateLimit = require('express-rate-limit');
 const { db } = require('../db');
 const { firmar, requiereLogin } = require('../middleware/auth');
 const { passwordSchema } = require('../validacion');
-const { puedeVerDinero } = require('../permisos');
+const { puedeVerDinero, veTodosLosClientes } = require('../permisos');
 
 // Freno a ataques de fuerza bruta sobre el login.
 const limitador = rateLimit({
@@ -14,7 +14,7 @@ const limitador = rateLimit({
   legacyHeaders: false,
 });
 
-const publico = (id, u) => ({ id, nombre: u.nombre, email: u.email, rol: u.rol, avisos: u.avisos !== false, verDinero: puedeVerDinero(u) });
+const publico = (id, u) => ({ id, nombre: u.nombre, email: u.email, rol: u.rol, avisos: u.avisos !== false, verDinero: puedeVerDinero(u), todosLosClientes: veTodosLosClientes(u) });
 
 router.post('/login', limitador, async (req, res) => {
   const email = String(req.body.email || '').trim().toLowerCase();

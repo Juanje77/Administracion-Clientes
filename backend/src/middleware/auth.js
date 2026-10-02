@@ -1,6 +1,6 @@
 const jwt = require('jsonwebtoken');
 const { db } = require('../db');
-const { puedeVerDinero } = require('../permisos');
+const { puedeVerDinero, veTodosLosClientes } = require('../permisos');
 
 const SECRET = () => process.env.JWT_SECRET;
 
@@ -8,7 +8,7 @@ function firmar(usuario) {
   return jwt.sign({ id: usuario.id, rol: usuario.rol }, SECRET(), { expiresIn: '8h' });
 }
 
-// El rol y los permisos se leen de la base de datos (no del token): así, desactivar a alguien o quitarle el
+// El rol y los permisos (dinero y clientes visibles) se leen de la base de datos (no del token): así, desactivar a alguien o quitarle el
 // acceso a los montos surte efecto enseguida y no recién cuando vence su sesión (8 h). Para no leer la base en
 // cada petición se guarda una copia 30 s en memoria; los cambios hechos en el mismo servidor la invalidan al instante.
 const TTL_MS = process.env.NODE_ENV === 'test' ? 0 : 30 * 1000;
@@ -20,7 +20,7 @@ async function cargarUsuario(id) {
   const doc = await db.collection('usuarios').doc(id).get();
   const d = doc.exists ? doc.data() : null;
   const usuario = d && d.activo !== false
-    ? { id, nombre: d.nombre, email: d.email, rol: d.rol, verDinero: puedeVerDinero(d) }
+    ? { id, nombre: d.nombre, email: d.email, rol: d.rol, verDinero: puedeVerDinero(d), todosLosClientes: veTodosLosClientes(d) }
     : null;
   if (TTL_MS) copias.set(id, { usuario, expira: Date.now() + TTL_MS });
   return usuario;

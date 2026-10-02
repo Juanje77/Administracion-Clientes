@@ -124,6 +124,22 @@ Anular un cobro o borrar un honorario sigue siendo solo de administradores, teng
 Los cambios valen desde la siguiente petición de esa persona (sin que tenga que volver a entrar; en producción puede demorar hasta 30 segundos).
 **Desactivar a un usuario cierra su sesión de inmediato** (antes seguía valiendo hasta 8 horas).
 
+## Quién ve qué clientes
+
+Cada persona del equipo (no administradora) tiene un acceso a clientes:
+
+- **Solo los clientes que se le asignen** (valor por defecto para usuarios nuevos).
+- **Todos los clientes** (los usuarios que ya existían antes de esta función lo conservan hasta que se los restrinja).
+
+Los administradores ven todo. La asignación se hace desde los dos lados, sobre los mismos datos (`responsables` en el cliente): en la ficha del cliente (*Quién puede ver este cliente*) o en **Usuarios → Asignar clientes**.
+
+Para quien tiene acceso limitado, un cliente ajeno **no existe** (404) en todo el sistema: lista, ficha, interacciones, tareas, vencimientos, honorarios y cobros, documentos, Agenda, pendientes urgentes, exportaciones y el resumen diario por email. Reglas adicionales:
+
+- Una tarea de un cliente **no se puede asignar** a quien no lo ve: primero hay que darle acceso al cliente (o elegir a otra persona). Las tareas internas (sin cliente) pueden ir a cualquiera.
+- Quien crea un cliente con acceso limitado queda como responsable de ese cliente. Solo un administrador cambia los responsables.
+- Generar los honorarios del mes y aplicar el calendario requieren ver todos los clientes. Los totales del estudio en el Inicio (facturado, cobrado, deuda total) tampoco se muestran a quien ve solo algunos clientes; en Honorarios ve lo de sus clientes.
+- Los cambios de acceso valen desde la siguiente petición de esa persona.
+
 ## Roles
 - **Administrador:** gestiona usuarios y puede eliminar clientes definitivamente.
 - **Usuario:** opera clientes e interacciones. "Eliminar" archiva (estado Inactivo).

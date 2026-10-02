@@ -5,6 +5,7 @@ const express = require('express');
 const router = express.Router();
 const path = require('path');
 const { db, aObjeto, bucket } = require('../db');
+const { puedeVerCliente } = require('../servicios/acceso');
 const { CATEGORIAS_DOC } = require('../validacion');
 
 const documentos = () => db.collection('documentos');
@@ -36,8 +37,17 @@ function limpiarNombre(nombre) {
 
 const salida = (d) => d;
 
+// Un documento de un cliente que no puede ver es, para esta persona, un documento inexistente.
+router.param('id', async (req, res, next, id) => {
+  if (req.usuario.todosLosClientes) return next();
+  const doc = await documentos().doc(id).get();
+  if (doc.exists && !(await puedeVerCliente(req.usuario, doc.data().clienteId))) return res.status(404).json({ error: 'Documento no encontrado' });
+  next();
+});
+
 router.get('/', async (req, res) => {
   if (!req.query.clienteId) return res.status(400).json({ error: 'Falta el cliente' });
+  if (!(await puedeVerCliente(req.usuario, String(req.query.clienteId)))) return res.status(404).json({ error: 'Cliente no encontrado' });
   const snap = await documentos().where('clienteId', '==', String(req.query.clienteId)).get();
   res.json(snap.docs.map(aObjeto).map(salida).sort((a, b) => b.creadoEn - a.creadoEn));
 });
@@ -54,7 +64,7 @@ router.post('/', express.raw({ type: () => true, limit: MAX_BYTES }), async (req
   const tipo = TIPOS[ext];
   if (!tipo) return res.status(400).json({ error: `Tipo de archivo no permitido. Se aceptan: ${Object.keys(TIPOS).join(', ')}` });
   if (!tipo.ok(req.body)) return res.status(400).json({ error: 'El contenido del archivo no coincide con su tipo' });
-  if (!(await db.collection('clientes').doc(clienteId).get()).exists) return res.status(404).json({ error: 'Cliente no encontrado' });
+  if (!(await db.collection('clientes').doc(clienteId).get()).exists || !(await puedeVerCliente(req.usuario, clienteId))) return res.status(404).json({ error: 'Cliente no encontrado' });
 
   const archivos = bucket();
   const ref = documentos().doc();

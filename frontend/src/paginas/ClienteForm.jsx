@@ -6,7 +6,7 @@ import Alerta from '../componentes/Alerta';
 
 const VACIO = {
   razonSocial: '', cuit: '', email: '', telefono: '', direccion: '', ciudad: '', notas: '',
-  estado: 'POTENCIAL', tipoPersona: '', condicionIva: '', regimen: '', etiquetas: '', obligaciones: [], abonoMensual: '', recordatorios: true,
+  estado: 'POTENCIAL', responsables: [], tipoPersona: '', condicionIva: '', regimen: '', etiquetas: '', obligaciones: [], abonoMensual: '', recordatorios: true,
 };
 const CONDICIONES_IVA = ['Responsable Inscripto', 'Monotributista', 'Exento', 'Consumidor Final', 'No Responsable'];
 
@@ -28,6 +28,11 @@ export default function ClienteForm() {
   const [errores, setErrores] = useState({});
   const [errorGeneral, setErrorGeneral] = useState('');
   const [catalogo, setCatalogo] = useState([]);
+  const [equipo, setEquipo] = useState([]); // solo administradores: personas con acceso limitado a clientes
+
+  useEffect(() => {
+    if (usuario.rol === 'ADMIN') api('/usuarios').then((l) => setEquipo(l.filter((x) => x.rol !== 'ADMIN' && x.activo))).catch(() => {});
+  }, [usuario.rol]);
 
   useEffect(() => { api('/calendarios/catalogo').then(setCatalogo).catch(() => {}); }, []);
 
@@ -125,6 +130,24 @@ export default function ClienteForm() {
             <input className="campo" placeholder="monotributo, sueldos" value={f.etiquetas} onChange={set('etiquetas')} />
           </Campo>
         </div>
+        {usuario.rol === 'ADMIN' && equipo.length > 0 && (
+          <div className="sm:col-span-2">
+            <label className="etiqueta-label">Quién puede ver este cliente</label>
+            <p className="mb-2 text-xs text-machine">Los administradores y quienes tienen acceso a todos los clientes lo ven siempre. Marcá a quién más.</p>
+            <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm">
+              {equipo.map((p) => (
+                <label key={p.id} className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={(f.responsables || []).includes(p.id)}
+                    onChange={(e) => setF({ ...f, responsables: e.target.checked ? [...(f.responsables || []), p.id] : (f.responsables || []).filter((x) => x !== p.id) })}
+                  />
+                  {p.nombre}{p.todosLosClientes && <span className="text-machine"> (ya ve todos)</span>}
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
         <div className="sm:col-span-2">
           <label className="etiqueta-label">Obligaciones impositivas (generan los vencimientos del calendario)</label>
           {catalogo.length === 0 ? (

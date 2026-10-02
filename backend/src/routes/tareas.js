@@ -2,6 +2,7 @@ const router = require('express').Router();
 const { db, aObjeto } = require('../db');
 const { todosLosClientes } = require('../cache');
 const { tareaSchema, tareaCambiosSchema } = require('../validacion');
+const { idsVisibles, visiblePara, puedeVerCliente, exigirCliente, comoAcceso } = require('../servicios/acceso');
 const { avisarAsignacion } = require('../servicios/asignaciones');
 const { hoy, sumarDias, situacion, mapaClientes, mapaUsuarios, porFecha, alertaTarea, diasAgenda, LIMITE_AGENDA } = require('../util');
 
@@ -24,6 +25,7 @@ const salida = (t, clientes, usuarios) => ({
 router.get('/', async (req, res) => {
   const { clienteId, asignado } = req.query;
   const limite = sumarDias(hoy(), diasAgenda(req.query.dias));
+  if (clienteId && !(await exigirCliente(req, res, String(clienteId)))) return;
   let consulta = tareas();
   if (clienteId) consulta = consulta.where('clienteId', '==', String(clienteId));
   else if (asignado) {
@@ -32,7 +34,8 @@ router.get('/', async (req, res) => {
   } else consulta = consulta.where('alerta', '<=', limite).orderBy('alerta').limit(LIMITE_AGENDA);
 
   const [snap, clientes, usuarios] = await Promise.all([consulta.get(), mapaClientes(), mapaUsuarios()]);
-  let lista = snap.docs.map(aObjeto);
+  const ids = await idsVisibles(req.usuario);
+  let lista = snap.docs.map(aObjeto).filter((t) => visiblePara(ids, t.clienteId));
   if (clienteId && asignado) lista = lista.filter((t) => t.asignadoA === (asignado === 'yo' ? req.usuario.id : String(asignado)));
   lista = lista.map((t) => salida(t, clientes, usuarios));
   // Pendientes primero (por fecha), luego las hechas (las más recientes arriba).
@@ -41,14 +44,20 @@ router.get('/', async (req, res) => {
 });
 
 // Valida que el cliente (si lo hay) y el responsable existan; el responsable debe estar activo.
-async function validarReferencias({ clienteId, asignadoA }) {
+// Con cliente: quien la crea y quien la recibe deben poder ver ese cliente (si no, primero hay que darle acceso).
+async function validarReferencias({ clienteId, asignadoA, actor }) {
   const detalles = {};
-  if (clienteId && !(await db.collection('clientes').doc(clienteId).get()).exists) detalles.clienteId = ['El cliente no existe'];
+  if (clienteId && (!(await db.collection('clientes').doc(clienteId).get()).exists || !(await puedeVerCliente(actor, clienteId)))) detalles.clienteId = ['El cliente no existe'];
   let asignado = null;
   if (asignadoA) {
     const doc = await db.collection('usuarios').doc(asignadoA).get();
     if (!doc.exists || doc.data().activo === false) detalles.asignadoA = ['La persona elegida no existe o está desactivada'];
-    else asignado = { id: doc.id, ...doc.data() };
+    else {
+      asignado = { id: doc.id, ...doc.data() };
+      if (clienteId && !detalles.clienteId && !(await puedeVerCliente(comoAcceso(asignado), clienteId))) {
+        detalles.asignadoA = ['Esa persona no tiene acceso a este cliente. Dale acceso al cliente primero o elegí a otra persona'];
+      }
+    }
   }
   return { detalles: Object.keys(detalles).length ? detalles : null, asignado };
 }
@@ -60,7 +69,7 @@ router.post('/', async (req, res) => {
   const r = tareaSchema.safeParse(req.body);
   if (!r.success) return errorValidacion(res, r.error);
   const asignadoA = r.data.asignadoA ?? req.usuario.id; // por defecto, quien la crea
-  const { detalles, asignado } = await validarReferencias({ clienteId: r.data.clienteId, asignadoA });
+  const { detalles, asignado } = await validarReferencias({ clienteId: r.data.clienteId, asignadoA, actor: req.usuario });
   if (detalles) return res.status(400).json({ error: 'Datos inválidos', detalles });
 
   const nueva = {
@@ -86,8 +95,12 @@ router.patch('/:id', async (req, res) => {
   if (!r.success) return errorValidacion(res, r.error);
   const ref = tareas().doc(req.params.id);
   const actual = await ref.get();
-  if (!actual.exists) return res.status(404).json({ error: 'Tarea no encontrada' });
-  const { detalles, asignado } = await validarReferencias({ clienteId: r.data.clienteId, asignadoA: r.data.asignadoA });
+  if (!actual.exists || !(await puedeVerCliente(req.usuario, actual.data().clienteId))) return res.status(404).json({ error: 'Tarea no encontrada' });
+  // si cambia el cliente o el responsable se revalida la combinación completa
+  const nuevoCliente = r.data.clienteId !== undefined ? r.data.clienteId : actual.data().clienteId;
+  const nuevoResp = r.data.asignadoA ?? actual.data().asignadoA;
+  const revalidar = r.data.clienteId !== undefined || (r.data.asignadoA && r.data.asignadoA !== actual.data().asignadoA);
+  const { detalles, asignado } = await validarReferencias({ clienteId: revalidar ? nuevoCliente : undefined, asignadoA: revalidar ? nuevoResp : r.data.asignadoA, actor: req.usuario });
   if (detalles) return res.status(400).json({ error: 'Datos inválidos', detalles });
 
   const { hecha, ...resto } = r.data;
@@ -112,7 +125,7 @@ router.patch('/:id', async (req, res) => {
 router.delete('/:id', async (req, res) => {
   const ref = tareas().doc(req.params.id);
   const doc = await ref.get();
-  if (!doc.exists) return res.status(404).json({ error: 'Tarea no encontrada' });
+  if (!doc.exists || !(await puedeVerCliente(req.usuario, doc.data().clienteId))) return res.status(404).json({ error: 'Tarea no encontrada' });
   if (doc.data().creadoPor !== req.usuario.id && req.usuario.rol !== 'ADMIN') {
     return res.status(403).json({ error: 'Solo quien la creó o un administrador puede borrarla' });
   }

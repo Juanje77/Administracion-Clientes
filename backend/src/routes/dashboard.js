@@ -1,7 +1,7 @@
 // Panel de inicio: totales del estudio. Las sumas usan consultas de agregación de Firestore
 // (cuestan ~1 lectura cada una sin importar cuántos documentos sumen).
 const router = require('express').Router();
-const { todosLosClientes } = require('../cache');
+const { clientesVisibles } = require('../servicios/acceso');
 const { requiereAdmin } = require('../middleware/auth');
 const { resumenAlertas } = require('../servicios/alertas');
 const { deudores, mesActual } = require('../servicios/honorarios');
@@ -23,7 +23,9 @@ router.get('/', async (req, res) => {
   if (!parsed.success) return res.status(400).json({ error: 'Período inválido (AAAA-MM)' });
   const periodo = parsed.data;
   const avisos = [];
-  const dinero = req.usuario.verDinero; // quien no tiene acceso a los montos ni siquiera los calcula
+  // Quien no tiene acceso a los montos ni siquiera los calcula. Los totales del estudio (facturado, cobrado, deuda
+  // total) tampoco los ve quien solo tiene algunos clientes: para él se muestran en la pantalla de Honorarios.
+  const dinero = req.usuario.verDinero && req.usuario.todosLosClientes;
   const tomar = (r, nombre) => {
     if (r.status === 'fulfilled') return r.value;
     console.error(`[dashboard] ${nombre}:`, r.reason);
@@ -32,8 +34,8 @@ router.get('/', async (req, res) => {
   };
 
   const [rClientes, rAgenda, rDeuda, rSerie] = await Promise.allSettled([
-    todosLosClientes(),
-    resumenAlertas(req.usuario.id),
+    clientesVisibles(req.usuario),
+    resumenAlertas(req.usuario),
     dinero ? deudores() : Promise.resolve(null),
     dinero ? asegurarResumenes().then(() => leerSerie(ultimosMeses(periodo, 6))) : Promise.resolve(null),
   ]);
