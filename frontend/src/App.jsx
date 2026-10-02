@@ -12,6 +12,7 @@ import Cuenta from './paginas/Cuenta';
 import Calendario from './paginas/Calendario';
 import Importar from './paginas/Importar';
 import Honorarios from './paginas/Honorarios';
+import Inicio from './paginas/Inicio';
 
 function Layout({ children }) {
   const { usuario, logout } = useAuth();
@@ -32,7 +33,8 @@ function Layout({ children }) {
       <header className="border-b bg-white">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-2 px-4 py-3">
           <span className="mr-4 font-semibold">Estudio Contable</span>
-          <nav className="flex gap-1">
+          <nav className="flex flex-wrap gap-1">
+            <NavLink to="/inicio" className={enlace}>Inicio</NavLink>
             <NavLink to="/agenda" className={enlace}>
               Agenda
               {urgentes > 0 && <span className="ml-1.5 rounded-full bg-red-600 px-1.5 py-0.5 text-xs text-white" aria-label={`${urgentes} urgentes`}>{urgentes}</span>}
@@ -60,7 +62,8 @@ export default function App() {
   return (
     <Layout>
       <Routes>
-        <Route path="/" element={<Navigate to="/agenda" replace />} />
+        <Route path="/" element={<Navigate to="/inicio" replace />} />
+        <Route path="/inicio" element={<Inicio />} />
         <Route path="/agenda" element={<Agenda />} />
         <Route path="/cuenta" element={<Cuenta />} />
         <Route path="/calendario" element={<Calendario />} />
@@ -71,7 +74,7 @@ export default function App() {
         <Route path="/clientes/:id/editar" element={<ClienteForm />} />
         {usuario.rol === 'ADMIN' && <Route path="/usuarios" element={<Usuarios />} />}
         {usuario.rol === 'ADMIN' && <Route path="/importar" element={<Importar />} />}
-        <Route path="*" element={<Navigate to="/agenda" replace />} />
+        <Route path="*" element={<Navigate to="/inicio" replace />} />
       </Routes>
     </Layout>
   );

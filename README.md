@@ -80,7 +80,7 @@ npm test                        # levanta el emulador de Firestore automáticame
 - `cuits/{11 dígitos}`: reserva que garantiza un CUIT único
 - `tareas/{id}`: clienteId, título, `vence` (AAAA-MM-DD), asignadoA, hecha
 - `vencimientos/{clienteId_impuesto_período}`: impuesto, período, `vence`, estado (PENDIENTE/PRESENTADO). El ID evita duplicados.
-- `honorarios/{id}`: clienteId, período, concepto, monto, pagado, saldo; subcolección `pagos` (fecha, monto, medio, nota)
+- `honorarios/{id}`: clienteId, período, concepto, monto, pagado, saldo; y `pagos/{id}` (honorarioId, clienteId, fecha, monto, medio, nota)
 - `calendarios/{AAAA-MM}`: filas del calendario mensual con la fecha para cada terminación de CUIT (0–9)
 
 Firestore no busca texto parcial, así que el servidor guarda la lista de clientes en memoria y filtra/ordena ahí.
@@ -100,13 +100,21 @@ solo lo pendiente sin leer el historial.
 - "Hoy" se calcula en horario de Argentina; se cambia con la variable `TZ_NEGOCIO` del `.env`.
 - **Mi cuenta:** cada usuario puede cambiar su contraseña (clic en tu nombre, arriba a la derecha).
 
+## Inicio (dashboard) y exportaciones
+- **Inicio** muestra, para el mes elegido: lo cobrado (cifra principal) y lo facturado, la deuda total, clientes activos y nuevos,
+  pendientes urgentes, un gráfico de **cobrado por mes** (últimos 6 meses, con tooltip y vista de tabla) y los 5 mayores deudores.
+  Las sumas usan consultas de agregación de Firestore, así que cuestan pocas lecturas.
+- **Exportar:** *Clientes* → Excel o CSV (respeta los filtros de la lista; el Excel se puede volver a importar); *Honorarios* → Excel o PDF del mes;
+  *Deudores* → Excel o PDF. El CSV usa `;` y acentos correctos para Excel en español, y neutraliza celdas que empiecen con `=`, `+`, `-` o `@`.
+- Los cobros viven en la colección `pagos` (con `honorarioId`, `clienteId` y `fecha`) para poder sumarlos por fecha en todo el estudio.
+
 ## Honorarios y cobros
 - En cada cliente cargas su **abono mensual**. En *Honorarios → Generar abonos del mes* se crea el honorario del mes de cada
   cliente **activo** con abono (si lo generas dos veces no duplica). También puedes agregar honorarios sueltos (ej. "Balance anual") dentro del cliente.
 - Los **cobros** se registran uno a uno (parciales o totales, con fecha, medio de pago y nota). No se puede cobrar más que el saldo.
   El saldo = facturado − cobrado y se actualiza solo. Un honorario con saldo de un mes ya terminado figura como *Vencido*.
 - *Deudores* muestra cuánto debe cada cliente sumando todos los meses. Solo un administrador puede anular un cobro o borrar un honorario.
-- Los importes se guardan con centavos. Colecciones: `honorarios/{id}` y su subcolección `pagos`.
+- Los importes se guardan con centavos. Colecciones: `honorarios` y `pagos`.
 
 ## Importar clientes desde Excel / CSV
 Solo administradores: *Clientes → Importar desde Excel*.

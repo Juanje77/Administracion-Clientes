@@ -3,16 +3,14 @@ const { db, aObjeto } = require('../db');
 const { todosLosClientes, invalidar } = require('../cache');
 const { requiereAdmin } = require('../middleware/auth');
 const { clienteSchema, interaccionSchema } = require('../validacion');
+const { filtrarYOrdenar } = require('../servicios/clientes');
 
-const COLUMNAS_ORDEN = ['razonSocial', 'cuit', 'email', 'telefono', 'ciudad', 'estado', 'creadoEn'];
 const clientes = () => db.collection('clientes');
 
 function errorValidacion(res, error) {
   return res.status(400).json({ error: 'Datos inválidos', detalles: error.flatten().fieldErrors });
 }
 
-// Minúsculas y sin tildes: "García" se encuentra buscando "garcia".
-const plano = (s) => String(s ?? '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
 const claveCuit = (cuit) => (cuit ? String(cuit).replace(/\D/g, '') : null);
 const normalizarEtiquetas = (lista = []) => [...new Set(lista.map((n) => n.toLowerCase()))].sort();
 
@@ -24,35 +22,14 @@ class CuitDuplicado extends Error {}
 const refCuit = (clave) => db.collection('cuits').doc(clave);
 
 router.get('/', async (req, res) => {
-  const { q, estado, ciudad, etiqueta, orden = 'razonSocial', dir = 'asc' } = req.query;
   const pagina = Math.max(1, Number(req.query.pagina) || 1);
   const porPagina = Math.min(100, Math.max(1, Number(req.query.porPagina) || 25));
-
-  let lista = await todosLosClientes();
-  if (q) {
-    const buscado = plano(q);
-    lista = lista.filter((c) => ['razonSocial', 'email', 'telefono', 'cuit'].some((k) => plano(c[k]).includes(buscado)));
-  }
-  if (['ACTIVO', 'INACTIVO', 'POTENCIAL'].includes(estado)) lista = lista.filter((c) => c.estado === estado);
-  if (ciudad) lista = lista.filter((c) => plano(c.ciudad) === plano(ciudad));
-  if (etiqueta) lista = lista.filter((c) => (c.etiquetas || []).includes(String(etiqueta).toLowerCase()));
-
-  const campo = COLUMNAS_ORDEN.includes(orden) ? orden : 'razonSocial';
-  const signo = dir === 'desc' ? -1 : 1;
-  const ordenada = [...lista].sort((a, b) => {
-    const x = a[campo], y = b[campo];
-    if (x == null && y == null) return 0;
-    if (x == null) return 1; // los vacíos siempre al final
-    if (y == null) return -1;
-    if (x instanceof Date) return signo * (x - y);
-    return signo * String(x).localeCompare(String(y), 'es', { sensitivity: 'base', numeric: true });
-  });
-
+  const lista = filtrarYOrdenar(await todosLosClientes(), req.query);
   res.json({
-    total: ordenada.length,
+    total: lista.length,
     pagina,
     porPagina,
-    datos: ordenada.slice((pagina - 1) * porPagina, pagina * porPagina).map(salida),
+    datos: lista.slice((pagina - 1) * porPagina, pagina * porPagina).map(salida),
   });
 });
 
@@ -136,9 +113,9 @@ router.delete('/:id', async (req, res) => {
     return requiereAdmin(req, res, async () => {
       const clave = claveCuit(doc.data().cuit);
       await db.recursiveDelete(ref); // borra también el historial (subcolección)
-      for (const col of ['tareas', 'vencimientos', 'honorarios']) {
+      for (const col of ['tareas', 'vencimientos', 'honorarios', 'pagos']) {
         const huerfanos = await db.collection(col).where('clienteId', '==', req.params.id).get();
-        await Promise.all(huerfanos.docs.map((d) => db.recursiveDelete(d.ref))); // honorarios incluye sus cobros
+        await Promise.all(huerfanos.docs.map((d) => d.ref.delete()));
       }
       if (clave) await refCuit(clave).delete();
       await invalidar();

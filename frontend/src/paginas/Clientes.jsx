@@ -45,6 +45,11 @@ export default function Clientes() {
   const ordenarPor = (campo) =>
     setOrden({ campo, dir: orden.campo === campo && orden.dir === 'asc' ? 'desc' : 'asc' });
   const paginas = Math.max(1, Math.ceil(resultado.total / resultado.porPagina));
+  const exportar = (formato) => {
+    const p = new URLSearchParams({ orden: orden.campo, dir: orden.dir });
+    Object.entries(filtros).forEach(([k, v]) => v && p.set(k, v));
+    return `/api/exportar/clientes.${formato}?${p}`;
+  };
 
   return (
     <div className="space-y-4">
@@ -104,6 +109,11 @@ export default function Clientes() {
           </tbody>
         </table>
       </div>
+
+      <p className="text-sm text-slate-600">
+        Exportar los {resultado.total} clientes de esta lista:{' '}
+        <a className="text-blue-700 hover:underline" href={exportar('xlsx')}>Excel</a> · <a className="text-blue-700 hover:underline" href={exportar('csv')}>CSV</a>
+      </p>
 
       <div className="flex items-center justify-between text-sm">
         <button className="btn-sec" disabled={pagina <= 1} onClick={() => setPagina(pagina - 1)}>← Anterior</button>

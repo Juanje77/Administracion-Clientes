@@ -22,6 +22,8 @@ app.use('/api/alertas', requiereLogin, require('./routes/alertas'));
 app.use('/api/calendarios', requiereLogin, require('./routes/calendarios'));
 app.use('/api/importacion', requiereLogin, require('./routes/importacion'));
 app.use('/api/honorarios', requiereLogin, require('./routes/honorarios'));
+app.use('/api/dashboard', requiereLogin, require('./routes/dashboard'));
+app.use('/api/exportar', requiereLogin, require('./routes/exportar'));
 
 // En producción el mismo servidor entrega el frontend compilado.
 const dist = path.join(__dirname, '../../frontend/dist');

@@ -60,6 +60,10 @@ function PorMes() {
         <button className="btn-sec" onClick={generar}>Generar abonos del mes</button>
       </div>
       {msg && <p role={msg.ok ? 'status' : 'alert'} className={`text-sm ${msg.ok ? 'text-green-700' : 'text-red-600'}`}>{msg.texto}</p>}
+      <p className="text-sm text-slate-600">
+        Descargar este mes:{' '}
+        <a className="text-blue-700 hover:underline" href={`/api/exportar/honorarios.xlsx?periodo=${periodo}`}>Excel</a> · <a className="text-blue-700 hover:underline" href={`/api/exportar/honorarios.pdf?periodo=${periodo}`}>PDF</a>
+      </p>
 
       <div className="overflow-x-auto rounded-lg border bg-white">
         <table className="w-full text-left text-sm">
@@ -103,6 +107,10 @@ function Deudores() {
   return (
     <div className="space-y-4">
       <Tarjeta titulo="Total adeudado por clientes" valor={pesos(r.total)} color={r.total > 0 ? 'text-red-600' : 'text-slate-400'} />
+      <p className="text-sm text-slate-600">
+        Descargar:{' '}
+        <a className="text-blue-700 hover:underline" href="/api/exportar/deudores.xlsx">Excel</a> · <a className="text-blue-700 hover:underline" href="/api/exportar/deudores.pdf">PDF</a>
+      </p>
       <div className="overflow-x-auto rounded-lg border bg-white">
         <table className="w-full text-left text-sm">
           <thead className="border-b bg-slate-50 text-xs uppercase text-slate-500">

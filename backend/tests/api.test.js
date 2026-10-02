@@ -451,7 +451,7 @@ describe('honorarios y cobros', () => {
   let h; // honorario del cliente A en el período actual
 
   beforeAll(async () => {
-    for (const col of ['clientes', 'cuits', 'honorarios']) await db.recursiveDelete(db.collection(col));
+    for (const col of ['clientes', 'cuits', 'honorarios', 'pagos']) await db.recursiveDelete(db.collection(col));
     await invalidar();
     const nuevo = (nombre, cuit, extra) => admin.post('/api/clientes').send({ razonSocial: nombre, cuit: cuitDe(cuit), condicionIva: 'RI', estado: 'ACTIVO', ...extra }).expect(201);
     c.a = (await nuevo('Hon A', '2011111111', { abonoMensual: 100000 })).body.id;
@@ -528,5 +528,115 @@ describe('honorarios y cobros', () => {
   it('al borrar un cliente definitivamente se borran sus honorarios', async () => {
     await admin.delete(`/api/clientes/${c.b}?definitivo=true`).expect(204);
     expect((await user.get('/api/honorarios/deudores').expect(200)).body.datos).toHaveLength(0);
+  });
+});
+
+// ---------- Dashboard y exportaciones ----------
+describe('dashboard y exportaciones', () => {
+  const { readSheet } = require('read-excel-file/node');
+  const [anio, mes] = hoy().split('-').map(Number);
+  const periodo = hoy().slice(0, 7);
+  const mesAnterior = (() => { const d = new Date(Date.UTC(anio, mes - 2, 1)); return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`; })();
+  const c = {};
+  const binario = (res, cb) => { const d = []; res.on('data', (x) => d.push(x)); res.on('end', () => cb(null, Buffer.concat(d))); };
+  const descargar = (agente, url) => agente.get(url).buffer(true).parse(binario);
+  const textoPdf = async (buffer) => {
+    const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+    const doc = await pdfjs.getDocument({ data: new Uint8Array(buffer), verbosity: 0 }).promise;
+    let t = '';
+    for (let i = 1; i <= doc.numPages; i++) t += (await (await doc.getPage(i)).getTextContent()).items.map((x) => x.str).join(' ') + ' ';
+    return t;
+  };
+
+  beforeAll(async () => {
+    for (const col of ['clientes', 'cuits', 'honorarios', 'pagos']) await db.recursiveDelete(db.collection(col));
+    await invalidar();
+    const nuevo = (nombre, cuit, extra) => admin.post('/api/clientes').send({ razonSocial: nombre, cuit: cuitDe(cuit), condicionIva: 'RI', estado: 'ACTIVO', ...extra }).expect(201);
+    c.a = (await nuevo('Dash Álvarez', '2044444444', { abonoMensual: 100000, ciudad: 'Santa Rosa', etiquetas: ['mensual'] })).body.id;
+    c.b = (await nuevo('Dash B', '2055555555', { abonoMensual: 50000 })).body.id;
+    await admin.post('/api/clientes').send({ razonSocial: '=SUMA(1+1)', estado: 'POTENCIAL' }).expect(201);
+    await admin.post('/api/honorarios/generar').send({ periodo }).expect(201);
+    const lista = (await admin.get(`/api/honorarios?periodo=${periodo}`)).body.datos;
+    const hon = (id) => lista.find((h) => h.clienteId === id).id;
+    await admin.post(`/api/honorarios/${hon(c.a)}/pagos`).send({ monto: 100000 }).expect(201);
+    await admin.post(`/api/honorarios/${hon(c.b)}/pagos`).send({ monto: 20000, medio: 'EFECTIVO' }).expect(201);
+    const previo = (await admin.post('/api/honorarios').send({ clienteId: c.a, periodo: mesAnterior, concepto: 'Balance', monto: 30000 }).expect(201)).body;
+    await admin.post(`/api/honorarios/${previo.id}/pagos`).send({ monto: 10000, fecha: `${mesAnterior}-15` }).expect(201);
+  });
+
+  it('el dashboard suma clientes, facturado, cobrado y deuda', async () => {
+    const d = (await user.get('/api/dashboard').expect(200)).body;
+    expect(d.periodo).toBe(periodo);
+    expect(d.clientes).toEqual({ total: 3, activos: 2, potenciales: 1, inactivos: 0, nuevosMes: 3 });
+    expect(d.honorarios).toMatchObject({ facturado: 150000, cobrado: 120000, deudaTotal: 50000, deudoresCantidad: 2 });
+    expect(d.honorarios.topDeudores.map((x) => [x.clienteNombre, x.saldo])).toEqual([['Dash B', 30000], ['Dash Álvarez', 20000]]);
+    expect(d.serie).toHaveLength(6);
+    expect(d.serie[5]).toEqual({ periodo, cobrado: 120000, facturado: 150000 });
+    expect(d.serie[4]).toEqual({ periodo: mesAnterior, cobrado: 10000, facturado: 30000 });
+    expect(d.serie[0].cobrado).toBe(0);
+    expect(d.agenda).toHaveProperty('urgentes');
+  });
+
+  it('el dashboard permite elegir otro período y valida', async () => {
+    const d = (await user.get(`/api/dashboard?periodo=${mesAnterior}`).expect(200)).body;
+    expect(d.honorarios).toMatchObject({ facturado: 30000, cobrado: 10000 });
+    expect(d.serie[5].periodo).toBe(mesAnterior);
+    await user.get('/api/dashboard?periodo=2026-13').expect(400);
+  });
+
+  it('exporta clientes a Excel con filtros, y el archivo se puede volver a importar', async () => {
+    const todos = await descargar(user, '/api/exportar/clientes.xlsx').expect(200);
+    expect(todos.headers['content-disposition']).toMatch(/clientes-\d{4}-\d{2}-\d{2}\.xlsx/);
+    const filas = await readSheet(todos.body);
+    expect(filas).toHaveLength(4); // encabezado + 3 clientes
+    expect(filas[0].slice(0, 3)).toEqual(['Nombre / Razón social', 'CUIT', 'Email']);
+    expect(filas.find((f) => f[0] === 'Dash Álvarez')).toContain('Santa Rosa');
+    const activos = await readSheet((await descargar(user, '/api/exportar/clientes.xlsx?estado=ACTIVO&q=alvarez').expect(200)).body);
+    expect(activos).toHaveLength(2);
+    // Round trip: las columnas exportadas las reconoce el importador
+    const vista = (await admin.post('/api/importacion/clientes').set('Content-Type', 'application/octet-stream').send(todos.body).expect(200)).body;
+    expect(Object.values(vista.mapeo)).toEqual(expect.arrayContaining(['razonSocial', 'cuit', 'email', 'telefono', 'direccion', 'ciudad', 'estado', 'tipoPersona', 'condicionIva', 'regimen', 'etiquetas', 'notas']));
+    expect(vista.resumen.rechazadas).toBe(3); // ya existen: reimportar no duplica
+  });
+
+  it('exporta CSV con ; y BOM, y neutraliza fórmulas', async () => {
+    const r = await descargar(user, '/api/exportar/clientes.csv').expect(200);
+    const texto = r.body.toString('utf8');
+    expect(texto.charCodeAt(0)).toBe(0xFEFF);
+    expect(texto.split('\r\n')[0]).toMatch(/^﻿Nombre \/ Razón social;CUIT;Email;/);
+    expect(texto).toContain('Dash Álvarez');
+    expect(texto).toContain("'=SUMA(1+1)"); // no se ejecuta como fórmula en Excel
+    await user.get('/api/exportar/clientes.pdf').expect(400);
+    await user.get('/api/exportar/clientes.txt').expect(400);
+  });
+
+  it('exporta honorarios y deudores a Excel y PDF', async () => {
+    const x = await readSheet((await descargar(user, `/api/exportar/honorarios.xlsx?periodo=${periodo}`).expect(200)).body);
+    expect(x[0]).toEqual(['Cliente', 'Concepto', 'Facturado', 'Cobrado', 'Saldo', 'Estado']);
+    expect(x).toHaveLength(4); // encabezado + 2 + total
+    expect(x[3]).toEqual(['TOTAL', null, 150000, 120000, 30000, null]);
+    expect(x.find((f) => f[0] === 'Dash B')[5]).toBe('Parcial');
+
+    const pdf = await descargar(user, `/api/exportar/honorarios.pdf?periodo=${periodo}`).expect(200);
+    expect(pdf.body.subarray(0, 4).toString()).toBe('%PDF');
+    const t = await textoPdf(pdf.body);
+    expect(t).toContain(`Honorarios ${periodo}`);
+    expect(t).toContain('Dash Álvarez');
+    expect(t).toContain('150.000,00');
+    expect(t).toContain('TOTAL');
+
+    const dx = await readSheet((await descargar(user, '/api/exportar/deudores.xlsx').expect(200)).body);
+    expect(dx[1][0]).toBe('Dash B');
+    expect(dx[dx.length - 1][3]).toBe(50000);
+    const dt = await textoPdf((await descargar(user, '/api/exportar/deudores.pdf').expect(200)).body);
+    expect(dt).toContain('Deudores');
+    expect(dt).toContain('50.000,00');
+    await user.get('/api/exportar/honorarios.csv').expect(400);
+    await user.get('/api/exportar/honorarios.xlsx?periodo=2026-13').expect(400);
+  });
+
+  it('exige sesión', async () => {
+    await request(app).get('/api/exportar/clientes.xlsx').expect(401);
+    await request(app).get('/api/dashboard').expect(401);
   });
 });
