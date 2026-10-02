@@ -18,14 +18,15 @@ export default function Agenda() {
   const [tareas, setTareas] = useState([]);
   const [venc, setVenc] = useState([]);
   const [soloMias, setSoloMias] = useState(true);
+  const [dias, setDias] = useState(7);
   const [error, setError] = useState('');
 
   const cargar = () => {
-    api(`/tareas${soloMias ? '?asignado=yo' : ''}`).then(setTareas).catch((e) => setError(e.message));
-    api('/vencimientos').then(setVenc).catch((e) => setError(e.message));
+    api(`/tareas?dias=${dias}${soloMias ? '&asignado=yo' : ''}`).then(setTareas).catch((e) => setError(e.message));
+    api(`/vencimientos?dias=${dias}`).then(setVenc).catch((e) => setError(e.message));
     avisarAlertas();
   };
-  useEffect(cargar, [soloMias]);
+  useEffect(cargar, [soloMias, dias]);
 
   const completar = async (t) => { await api(`/tareas/${t.id}`, { metodo: 'PATCH', cuerpo: { hecha: true } }); cargar(); };
   const presentar = async (v) => { await api(`/vencimientos/${v.id}`, { metodo: 'PATCH', cuerpo: { estado: 'PRESENTADO' } }); cargar(); };
@@ -34,14 +35,24 @@ export default function Agenda() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-xl font-semibold">Agenda</h1>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h1 className="text-xl font-semibold">Agenda</h1>
+        <label className="flex items-center gap-2 text-sm">
+          Mostrar vencido y próximos
+          <select className="campo w-28" value={dias} onChange={(e) => setDias(Number(e.target.value))}>
+            <option value={7}>7 días</option>
+            <option value={15}>15 días</option>
+            <option value={30}>30 días</option>
+          </select>
+        </label>
+      </div>
       {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Resumen titulo="Tareas vencidas" valor={cuenta(tareas, 'VENCIDA')} color="text-red-600" />
         <Resumen titulo="Tareas para hoy" valor={cuenta(tareas, 'HOY')} color="text-orange-600" />
         <Resumen titulo="Vencimientos vencidos" valor={cuenta(venc, 'VENCIDA')} color="text-red-600" />
-        <Resumen titulo="Vencen en 7 días" valor={cuenta(venc, 'HOY') + cuenta(venc, 'PROXIMA')} color="text-amber-600" />
+        <Resumen titulo="Vencen pronto" valor={cuenta(venc, 'HOY') + cuenta(venc, 'PROXIMA')} color="text-amber-600" />
       </div>
 
       <section className="rounded-lg border bg-white p-4 sm:p-6">
@@ -65,7 +76,7 @@ export default function Agenda() {
               <Situacion valor={t.situacion} />
             </li>
           ))}
-          {tareas.length === 0 && <li className="py-4 text-center text-sm text-slate-500">No tienes tareas pendientes. 🎉</li>}
+          {tareas.length === 0 && <li className="py-4 text-center text-sm text-slate-500">No tienes tareas pendientes en este período. 🎉</li>}
         </ul>
       </section>
 
@@ -88,7 +99,8 @@ export default function Agenda() {
               <button className="btn-sec" onClick={() => presentar(v)}>Presentado</button>
             </li>
           ))}
-          {venc.length === 0 && <li className="py-4 text-center text-sm text-slate-500">No hay vencimientos pendientes.</li>}
+          {venc.length === 0 && <li className="py-4 text-center text-sm text-slate-500">No hay vencimientos pendientes en este período.</li>}
+          {venc.length >= 500 && <li className="py-3 text-center text-xs text-amber-700">Se muestran los primeros 500; reduce el período para ver el resto.</li>}
         </ul>
       </section>
     </div>

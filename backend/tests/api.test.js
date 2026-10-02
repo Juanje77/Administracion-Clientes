@@ -15,7 +15,7 @@ async function login(email, password = 'clave12345') {
 
 beforeAll(async () => {
   for (const c of ['clientes', 'cuits', 'usuarios', 'tareas', 'vencimientos', 'calendarios']) await db.recursiveDelete(db.collection(c));
-  invalidar();
+  await invalidar();
   const passwordHash = await bcrypt.hash('clave12345', 4);
   await db.collection('usuarios').add({ nombre: 'Admin', email: 'admin@t.com', passwordHash, rol: 'ADMIN', activo: true });
   await db.collection('usuarios').add({ nombre: 'Ana', email: 'ana@t.com', passwordHash, rol: 'USUARIO', activo: true });
@@ -273,5 +273,38 @@ describe('calendario impositivo', () => {
     expect((await user.get(`/api/vencimientos?clienteId=${cli.a}`)).body.find((v) => v.id === va.id).vence).toBe('2026-10-21');
     await admin.delete('/api/calendarios/2026-10').expect(204);
     await user.post('/api/calendarios/2026-10/aplicar').expect(404);
+  });
+});
+
+// ---------- Hosting serverless: caché entre instancias y lecturas acotadas ----------
+describe('caché compartida y Agenda acotada', () => {
+  it('otra instancia ve los cambios gracias al contador de versión', async () => {
+    const { db: base } = require('../src/db');
+    const antes = (await user.get('/api/clientes?q=Instancia').expect(200)).body.total;
+    expect(antes).toBe(0);
+    // Simula que OTRA instancia del servidor crea un cliente y sube el contador de versión.
+    await base.collection('clientes').add({ razonSocial: 'Cliente Instancia B', estado: 'POTENCIAL', etiquetas: [], obligaciones: [], creadoEn: new Date(), actualizadoEn: new Date() });
+    await base.collection('meta').doc('clientes').set({ version: require('firebase-admin/firestore').FieldValue.increment(1) }, { merge: true });
+    expect((await user.get('/api/clientes?q=Instancia').expect(200)).body.total).toBe(1);
+  });
+
+  it('la Agenda trae lo vencido y lo próximo, no todo el futuro', async () => {
+    const c = (await user.post('/api/clientes').send({ razonSocial: 'Cliente Agenda' }).expect(201)).body.id;
+    const lejana = await user.post('/api/tareas').send({ clienteId: c, titulo: 'Lejana', vence: sumarDias(hoy(), 20) }).expect(201);
+    await user.post('/api/vencimientos').send({ clienteId: c, impuesto: 'IVA', periodo: '2026-10', vence: sumarDias(hoy(), 20) }).expect(201);
+    const titulos = async (url) => (await user.get(url).expect(200)).body.map((x) => x.titulo || x.impuesto);
+    expect(await titulos('/api/tareas')).not.toContain('Lejana');
+    expect(await titulos('/api/tareas?asignado=yo')).not.toContain('Lejana');
+    expect(await titulos('/api/tareas?dias=30')).toContain('Lejana');
+    expect(await titulos('/api/tareas?asignado=yo&dias=30')).toContain('Lejana');
+    expect((await user.get('/api/vencimientos').expect(200)).body.some((v) => v.clienteId === c)).toBe(false);
+    expect((await user.get('/api/vencimientos?dias=30').expect(200)).body.some((v) => v.clienteId === c)).toBe(true);
+    // En la ficha del cliente se ve todo, y completar una tarea la saca de las alertas
+    expect((await user.get(`/api/tareas?clienteId=${c}`).expect(200)).body).toHaveLength(1);
+    await user.patch(`/api/tareas/${lejana.body.id}`).send({ hecha: true }).expect(200);
+    expect(await titulos('/api/tareas?dias=30')).not.toContain('Lejana');
+    // Reabrirla la devuelve, y cambiar la fecha la mueve fuera del horizonte
+    await user.patch(`/api/tareas/${lejana.body.id}`).send({ hecha: false, vence: hoy() }).expect(200);
+    expect(await titulos('/api/tareas')).toContain('Lejana');
   });
 });

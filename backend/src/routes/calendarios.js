@@ -7,6 +7,7 @@ const { todosLosClientes } = require('../cache');
 const { requiereAdmin } = require('../middleware/auth');
 const { calendarioSchema, periodo: periodoSchema } = require('../validacion');
 const { leerCalendarioPdf } = require('../calendario/leerPdf');
+const { alertaVencimiento } = require('../util');
 
 const calendarios = () => db.collection('calendarios');
 const slug = (t) => t.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -33,7 +34,7 @@ router.get('/catalogo', async (_req, res) => {
 });
 
 // Lee el PDF y devuelve la vista previa; NO guarda nada hasta que se confirme.
-router.post('/importar', express.raw({ type: 'application/pdf', limit: '10mb' }), async (req, res) => {
+router.post('/importar', express.raw({ type: 'application/pdf', limit: '4mb' }), async (req, res) => {
   if (!Buffer.isBuffer(req.body) || req.body.subarray(0, 4).toString() !== '%PDF') {
     return res.status(400).json({ error: 'Sube un archivo PDF' });
   }
@@ -108,10 +109,10 @@ router.post('/:periodo/aplicar', async (req, res) => {
     previstos.slice(i, i + 400).forEach((p, j) => {
       const previo = existentes[i + j];
       if (!previo.exists) {
-        lote.create(refs[i + j], { ...p.datos, estado: 'PENDIENTE', presentadoEn: null, creadoEn: new Date() });
+        lote.create(refs[i + j], { ...p.datos, estado: 'PENDIENTE', presentadoEn: null, creadoEn: new Date(), ...alertaVencimiento({ ...p.datos, estado: 'PENDIENTE' }) });
         creados++;
       } else if (previo.data().estado === 'PENDIENTE' && previo.data().vence !== p.datos.vence) {
-        lote.update(refs[i + j], { vence: p.datos.vence, impuesto: p.datos.impuesto });
+        lote.update(refs[i + j], { vence: p.datos.vence, impuesto: p.datos.impuesto, ...alertaVencimiento({ vence: p.datos.vence, estado: 'PENDIENTE' }) });
         actualizados++;
       } else sinCambios++;
     });

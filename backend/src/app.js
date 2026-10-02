@@ -6,6 +6,8 @@ const cookieParser = require('cookie-parser');
 const { requiereLogin } = require('./middleware/auth');
 
 const app = express();
+// Detrás del proxy del hosting (Vercel): sin esto el límite de intentos de login vería siempre la misma IP.
+app.set('trust proxy', 1);
 app.use(helmet());
 app.use(express.json({ limit: '1mb' }));
 app.use(cookieParser());

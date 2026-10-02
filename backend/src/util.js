@@ -38,4 +38,20 @@ async function mapaUsuarios() {
 
 const porFecha = (a, b) => a.vence.localeCompare(b.vence) || (a.clienteNombre || '').localeCompare(b.clienteNombre || '', 'es');
 
-module.exports = { hoy, sumarDias, situacion, mapaClientes, mapaUsuarios, porFecha, DIAS_ALERTA };
+// Campos auxiliares para consultar pendientes SIN índices compuestos y sin leer todo el historial.
+// Solo existen mientras el elemento está pendiente (al cerrarlo pasan a null y salen de las consultas):
+//   alerta   = fecha de vencimiento                     -> "pendientes hasta tal fecha" (rango sobre un solo campo)
+//   alertaDe = "<usuario>|<fecha>" (solo tareas)        -> "pendientes de este usuario hasta tal fecha"
+const alertaTarea = (t) => (t.hecha
+  ? { alerta: null, alertaDe: null }
+  : { alerta: t.vence, alertaDe: `${t.asignadoA ?? ''}|${t.vence}` });
+const alertaVencimiento = (v) => ({ alerta: v.estado === 'PRESENTADO' ? null : v.vence });
+
+// Días hacia adelante que muestra la Agenda (además de todo lo vencido).
+function diasAgenda(valor) {
+  const n = Number(valor);
+  return [7, 15, 30].includes(n) ? n : DIAS_ALERTA;
+}
+const LIMITE_AGENDA = 500;
+
+module.exports = { hoy, sumarDias, situacion, mapaClientes, mapaUsuarios, porFecha, DIAS_ALERTA, alertaTarea, alertaVencimiento, diasAgenda, LIMITE_AGENDA };

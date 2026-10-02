@@ -86,7 +86,7 @@ router.post('/', async (req, res) => {
     if (e instanceof CuitDuplicado) return res.status(409).json({ error: 'Ya existe un cliente con ese CUIT' });
     throw e;
   }
-  invalidar();
+  await invalidar();
   res.status(201).json(salida({ id: ref.id, ...nuevo }));
 });
 
@@ -119,7 +119,7 @@ router.put('/:id', async (req, res) => {
       return { ...actual.data(), ...cambios };
     });
     if (!resultado) return res.status(404).json({ error: 'Cliente no encontrado' });
-    invalidar();
+    await invalidar();
     res.json(salida({ id: ref.id, ...resultado }));
   } catch (e) {
     if (e instanceof CuitDuplicado) return res.status(409).json({ error: 'Ya existe un cliente con ese CUIT' });
@@ -141,12 +141,12 @@ router.delete('/:id', async (req, res) => {
         await Promise.all(huerfanos.docs.map((d) => d.ref.delete()));
       }
       if (clave) await refCuit(clave).delete();
-      invalidar();
+      await invalidar();
       res.status(204).end();
     });
   }
   await ref.update({ estado: 'INACTIVO', actualizadoEn: new Date() });
-  invalidar();
+  await invalidar();
   res.json(salida(aObjeto(await ref.get())));
 });
 

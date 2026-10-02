@@ -2,7 +2,7 @@ const router = require('express').Router();
 const { db, aObjeto } = require('../db');
 const { todosLosClientes } = require('../cache');
 const { tareaSchema, tareaCambiosSchema } = require('../validacion');
-const { situacion, mapaClientes, mapaUsuarios, porFecha } = require('../util');
+const { hoy, sumarDias, situacion, mapaClientes, mapaUsuarios, porFecha, alertaTarea, diasAgenda, LIMITE_AGENDA } = require('../util');
 
 const tareas = () => db.collection('tareas');
 
@@ -17,15 +17,21 @@ const salida = (t, clientes, usuarios) => ({
   situacion: situacion(t.vence, t.hecha),
 });
 
-// Sin clienteId solo se listan las pendientes (evita leer todo el historial).
-// Con clienteId se devuelven todas las de ese cliente.
+// Con clienteId se devuelven todas las tareas de ese cliente (hechas y pendientes).
+// Sin clienteId (Agenda) solo las pendientes: lo vencido más lo que vence en los próximos `dias`.
 router.get('/', async (req, res) => {
   const { clienteId, asignado } = req.query;
+  const limite = sumarDias(hoy(), diasAgenda(req.query.dias));
   let consulta = tareas();
-  consulta = clienteId ? consulta.where('clienteId', '==', String(clienteId)) : consulta.where('hecha', '==', false);
+  if (clienteId) consulta = consulta.where('clienteId', '==', String(clienteId));
+  else if (asignado) {
+    const quien = asignado === 'yo' ? req.usuario.id : String(asignado);
+    consulta = consulta.where('alertaDe', '>=', `${quien}|`).where('alertaDe', '<=', `${quien}|${limite}`).limit(LIMITE_AGENDA);
+  } else consulta = consulta.where('alerta', '<=', limite).orderBy('alerta').limit(LIMITE_AGENDA);
+
   const [snap, clientes, usuarios] = await Promise.all([consulta.get(), mapaClientes(), mapaUsuarios()]);
   let lista = snap.docs.map(aObjeto);
-  if (asignado) lista = lista.filter((t) => t.asignadoA === (asignado === 'yo' ? req.usuario.id : String(asignado)));
+  if (clienteId && asignado) lista = lista.filter((t) => t.asignadoA === (asignado === 'yo' ? req.usuario.id : String(asignado)));
   lista = lista.map((t) => salida(t, clientes, usuarios));
   // Pendientes primero (por fecha), luego las hechas (las más recientes arriba).
   lista.sort((a, b) => a.hecha - b.hecha || (a.hecha ? b.vence.localeCompare(a.vence) : porFecha(a, b)));
@@ -49,6 +55,7 @@ router.post('/', async (req, res) => {
     creadoPor: req.usuario.id,
     creadoEn: new Date(),
   };
+  Object.assign(nueva, alertaTarea(nueva));
   const ref = await tareas().add(nueva);
   const [clientes, usuarios] = await Promise.all([mapaClientes(), mapaUsuarios()]);
   res.status(201).json(salida({ id: ref.id, ...nueva }, clientes, usuarios));
@@ -58,13 +65,15 @@ router.patch('/:id', async (req, res) => {
   const r = tareaCambiosSchema.safeParse(req.body);
   if (!r.success) return errorValidacion(res, r.error);
   const ref = tareas().doc(req.params.id);
-  if (!(await ref.get()).exists) return res.status(404).json({ error: 'Tarea no encontrada' });
+  const actual = await ref.get();
+  if (!actual.exists) return res.status(404).json({ error: 'Tarea no encontrada' });
   const { hecha, ...resto } = r.data;
   const cambios = { ...resto };
   if (hecha !== undefined) {
     cambios.hecha = hecha;
     cambios.hechaEn = hecha ? new Date() : null;
   }
+  Object.assign(cambios, alertaTarea({ ...actual.data(), ...cambios }));
   await ref.update(cambios);
   const [doc, clientes, usuarios] = await Promise.all([ref.get(), mapaClientes(), mapaUsuarios()]);
   res.json(salida(aObjeto(doc), clientes, usuarios));

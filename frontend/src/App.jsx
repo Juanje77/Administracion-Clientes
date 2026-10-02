@@ -15,11 +15,11 @@ function Layout({ children }) {
   const { usuario, logout } = useAuth();
   const [urgentes, setUrgentes] = useState(0);
 
-  // Aviso de pendientes urgentes (vencidos o de hoy): se refresca cada 2 min y tras cada cambio.
+  // Aviso de pendientes urgentes (vencidos o de hoy): se refresca cada 5 min y tras cada cambio.
   useEffect(() => {
     const cargar = () => api('/alertas').then((a) => setUrgentes(a.urgentes)).catch(() => {});
     cargar();
-    const t = setInterval(cargar, 120000);
+    const t = setInterval(cargar, 300000);
     window.addEventListener('alertas', cargar);
     return () => { clearInterval(t); window.removeEventListener('alertas', cargar); };
   }, []);

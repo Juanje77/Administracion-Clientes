@@ -16,6 +16,9 @@ const mul = (m, n) => [
 
 async function extraer(buffer) {
   const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  // pdf.js busca su "worker" por ruta en tiempo de ejecución, algo que el empaquetado de Vercel no
+  // detecta. Importarlo de forma explícita lo incluye en la función y evita ese fallo.
+  if (!globalThis.pdfjsWorker) globalThis.pdfjsWorker = await import('pdfjs-dist/legacy/build/pdf.worker.mjs');
   const { OPS } = pdfjs;
   const doc = await pdfjs.getDocument({ data: new Uint8Array(buffer), verbosity: 0 }).promise;
   const page = await doc.getPage(1);

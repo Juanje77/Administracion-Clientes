@@ -1,7 +1,7 @@
 const router = require('express').Router();
 const { db, aObjeto } = require('../db');
 const { vencimientoSchema } = require('../validacion');
-const { situacion, mapaClientes, porFecha } = require('../util');
+const { hoy, sumarDias, situacion, mapaClientes, porFecha, alertaVencimiento, diasAgenda, LIMITE_AGENDA } = require('../util');
 
 const vencimientos = () => db.collection('vencimientos');
 
@@ -17,12 +17,13 @@ const salida = (v, clientes) => ({
 
 const slug = (t) => t.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
-// Sin clienteId solo se listan los pendientes; con clienteId, todos los de ese cliente.
+// Con clienteId se devuelven todos los de ese cliente. Sin clienteId (Agenda) solo los pendientes:
+// lo vencido más lo que vence en los próximos `dias` (7 por defecto).
 router.get('/', async (req, res) => {
   const { clienteId } = req.query;
   const consulta = clienteId
     ? vencimientos().where('clienteId', '==', String(clienteId))
-    : vencimientos().where('estado', '==', 'PENDIENTE');
+    : vencimientos().where('alerta', '<=', sumarDias(hoy(), diasAgenda(req.query.dias))).orderBy('alerta').limit(LIMITE_AGENDA);
   const [snap, clientes] = await Promise.all([consulta.get(), mapaClientes()]);
   const lista = snap.docs.map(aObjeto).map((v) => salida(v, clientes));
   lista.sort((a, b) => (a.estado === 'PRESENTADO') - (b.estado === 'PRESENTADO') || porFecha(a, b));
@@ -38,6 +39,7 @@ router.post('/', async (req, res) => {
   const id = `${r.data.clienteId}_${slug(r.data.impuesto)}_${r.data.periodo}`;
   const ref = vencimientos().doc(id);
   const nuevo = { ...r.data, estado: 'PENDIENTE', presentadoEn: null, creadoEn: new Date() };
+  Object.assign(nuevo, alertaVencimiento(nuevo));
   try {
     await ref.create(nuevo); // falla si ya existe ese impuesto/período para el cliente
   } catch (e) {
@@ -51,10 +53,11 @@ router.post('/', async (req, res) => {
 
 router.patch('/:id', async (req, res) => {
   const ref = vencimientos().doc(req.params.id);
-  if (!(await ref.get()).exists) return res.status(404).json({ error: 'Vencimiento no encontrado' });
+  const actual = await ref.get();
+  if (!actual.exists) return res.status(404).json({ error: 'Vencimiento no encontrado' });
   const estado = req.body.estado;
   if (!['PENDIENTE', 'PRESENTADO'].includes(estado)) return res.status(400).json({ error: 'Estado inválido' });
-  await ref.update({ estado, presentadoEn: estado === 'PRESENTADO' ? new Date() : null });
+  await ref.update({ estado, presentadoEn: estado === 'PRESENTADO' ? new Date() : null, ...alertaVencimiento({ ...actual.data(), estado }) });
   res.json(salida(aObjeto(await ref.get()), await mapaClientes()));
 });
 
