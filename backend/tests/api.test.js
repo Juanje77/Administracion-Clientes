@@ -308,3 +308,40 @@ describe('caché compartida y Agenda acotada', () => {
     expect(await titulos('/api/tareas')).toContain('Lejana');
   });
 });
+
+// ---------- Arranque en Vercel con configuración incompleta ----------
+describe('función de Vercel (api/index.js)', () => {
+  const { execFileSync } = require('child_process');
+  const raiz = path.join(__dirname, '../..');
+
+  // Ejecuta api/index.js en un proceso limpio, sin emulador, y devuelve la respuesta a un GET.
+  function respuesta(env) {
+    const limpio = { PATH: process.env.PATH, NODE_ENV: 'production', ...env };
+    const salida = execFileSync('node', ['-e', `
+      const h = require(${JSON.stringify(path.join(raiz, 'api/index.js'))});
+      const res = { setHeader() {}, end(b) { console.log(JSON.stringify({ status: this.statusCode, body: b })); } };
+      Promise.resolve(h({ method: 'GET', url: '/api/salud', headers: {} }, res));
+    `], { env: limpio, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+    return JSON.parse(salida.trim().split('\n').pop());
+  }
+
+  it('avisa si falta JWT_SECRET', () => {
+    const r = respuesta({ FIREBASE_SERVICE_ACCOUNT: '{}' });
+    expect(r.status).toBe(500);
+    expect(r.body).toContain('JWT_SECRET');
+  });
+  it('avisa si falta FIREBASE_SERVICE_ACCOUNT', () => {
+    const r = respuesta({ JWT_SECRET: 'un-secreto-bien-largo-123' });
+    expect(r.status).toBe(500);
+    expect(r.body).toContain('FIREBASE_SERVICE_ACCOUNT');
+  });
+  it('no filtra la clave si se pegó con comillas o mal formada', () => {
+    const clave = 'CLAVE-PRIVADA-SECRETA-123';
+    for (const valor of [`"{\\"private_key\\":\\"${clave}\\"}"`, `{"private_key": "${clave}"`, `{"type":"service_account","private_key":"${clave}"}`]) {
+      const r = respuesta({ JWT_SECRET: 'un-secreto-bien-largo-123', FIREBASE_SERVICE_ACCOUNT: valor });
+      expect(r.status).toBe(500);
+      expect(r.body).toContain('FIREBASE_SERVICE_ACCOUNT');
+      expect(r.body).not.toContain(clave);
+    }
+  });
+});

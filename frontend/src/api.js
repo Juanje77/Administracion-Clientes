@@ -17,6 +17,9 @@ export async function api(ruta, { metodo = 'GET', cuerpo } = {}) {
   });
   if (r.status === 204) return null;
   const datos = await r.json().catch(() => ({}));
-  if (!r.ok) throw new ErrorApi(datos.error || 'Error inesperado', r.status, datos.detalles);
+  if (!r.ok) {
+    // Si el servidor no respondió con JSON (error de la plataforma), al menos mostrar el código.
+    throw new ErrorApi(datos.error || `El servidor respondió con un error (código ${r.status}). Intenta de nuevo o revisa los logs del hosting.`, r.status, datos.detalles);
+  }
   return datos;
 }

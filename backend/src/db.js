@@ -7,18 +7,42 @@ const fs = require('fs');
 const { initializeApp, getApps, cert } = require('firebase-admin/app');
 const { getFirestore } = require('firebase-admin/firestore');
 
+// Error de configuración: su mensaje es seguro de mostrar (nunca incluye el contenido de la clave).
+function errorConfig(mensaje) {
+  const e = new Error(mensaje);
+  e.configuracion = true;
+  return e;
+}
+
 function iniciar() {
   if (getApps().length) return;
   if (process.env.FIRESTORE_EMULATOR_HOST) {
     initializeApp({ projectId: process.env.FIREBASE_PROJECT_ID || 'demo-clientes' });
     return;
   }
-  const origen = process.env.FIREBASE_SERVICE_ACCOUNT;
+  const origen = (process.env.FIREBASE_SERVICE_ACCOUNT || '').trim();
   if (!origen) {
-    throw new Error('Falta FIREBASE_SERVICE_ACCOUNT (JSON o ruta al archivo de la cuenta de servicio)');
+    throw errorConfig('Falta la variable de entorno FIREBASE_SERVICE_ACCOUNT (el JSON completo de la cuenta de servicio de Firebase)');
   }
-  const json = origen.trim().startsWith('{') ? origen : fs.readFileSync(origen, 'utf8');
-  initializeApp({ credential: cert(JSON.parse(json)) });
+  let json = origen;
+  if (!origen.startsWith('{')) {
+    // Se acepta también la ruta a un archivo (uso local). No se muestra el texto recibido: podría ser la clave.
+    if (origen.length > 300 || !fs.existsSync(origen)) {
+      throw errorConfig('FIREBASE_SERVICE_ACCOUNT debe ser el JSON completo (empieza con "{", sin comillas alrededor) o la ruta a un archivo existente');
+    }
+    json = fs.readFileSync(origen, 'utf8');
+  }
+  let cuenta;
+  try {
+    cuenta = JSON.parse(json);
+  } catch {
+    throw errorConfig('FIREBASE_SERVICE_ACCOUNT no es un JSON válido: pega el contenido completo del archivo descargado de Firebase');
+  }
+  try {
+    initializeApp({ credential: cert(cuenta) });
+  } catch {
+    throw errorConfig('La clave de FIREBASE_SERVICE_ACCOUNT no es válida: descarga una nueva desde Firebase y pégala completa');
+  }
 }
 
 iniciar();
