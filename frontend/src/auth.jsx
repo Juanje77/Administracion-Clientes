@@ -18,5 +18,5 @@ export function AuthProvider({ children }) {
     setUsuario(null);
   };
 
-  return <Ctx.Provider value={{ usuario, login, logout }}>{children}</Ctx.Provider>;
+  return <Ctx.Provider value={{ usuario, login, logout, actualizarUsuario: setUsuario }}>{children}</Ctx.Provider>;
 }

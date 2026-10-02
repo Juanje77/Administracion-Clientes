@@ -66,4 +66,4 @@ function bucket() {
   return getStorage().bucket();
 }
 
-module.exports = { db, aObjeto, bucket };
+module.exports = { db, aObjeto, bucket, errorConfig };

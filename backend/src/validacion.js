@@ -36,6 +36,8 @@ const clienteSchema = z
     // Claves de las obligaciones del calendario impositivo que tiene este cliente.
     obligaciones: z.array(z.string().trim().min(1)).max(100).optional(),
     // Honorario mensual pactado (en pesos). Vacío = sin abono.
+    // Recordatorios por email a este cliente (solo se envían si el administrador los activa en Avisos).
+    recordatorios: z.boolean().optional(),
     abonoMensual: z.preprocess((v) => (v === '' || v === undefined ? null : v), z.coerce.number().min(0).max(1e9).nullable()).optional(),
   })
   .superRefine((c, ctx) => {
@@ -127,6 +129,15 @@ const pagoSchema = z.object({
 
 const CATEGORIAS_DOC = ['CONTRATO', 'PRESUPUESTO', 'FACTURA', 'CONSTANCIA', 'BALANCE', 'OTRO'];
 
+const avisosConfigSchema = z.object({
+  equipoActivo: z.boolean(),
+  clientesDeuda: z.boolean(),
+  clientesVencimientos: z.boolean(),
+  diasEntreAvisosDeuda: z.coerce.number().int().min(1).max(90),
+  diasAnticipoVencimiento: z.coerce.number().int().min(1).max(15),
+  textoPago: z.string().trim().max(600).default(''),
+});
+
 const passwordSchema = z.object({
   actual: z.string().min(1, 'Ingresa tu contraseña actual'),
   nueva: z.string().min(8, 'Mínimo 8 caracteres'),
@@ -135,5 +146,5 @@ const passwordSchema = z.object({
 module.exports = {
   cuitValido, clienteSchema, interaccionSchema, usuarioSchema,
   tareaSchema, tareaCambiosSchema, vencimientoSchema, calendarioSchema, passwordSchema, periodo,
-  honorarioSchema, honorarioCambiosSchema, pagoSchema, CATEGORIAS_DOC,
+  honorarioSchema, honorarioCambiosSchema, pagoSchema, CATEGORIAS_DOC, avisosConfigSchema,
 };

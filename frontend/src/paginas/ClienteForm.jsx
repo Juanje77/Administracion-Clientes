@@ -4,7 +4,7 @@ import { api, ErrorApi } from '../api';
 
 const VACIO = {
   razonSocial: '', cuit: '', email: '', telefono: '', direccion: '', ciudad: '', notas: '',
-  estado: 'POTENCIAL', tipoPersona: '', condicionIva: '', regimen: '', etiquetas: '', obligaciones: [], abonoMensual: '',
+  estado: 'POTENCIAL', tipoPersona: '', condicionIva: '', regimen: '', etiquetas: '', obligaciones: [], abonoMensual: '', recordatorios: true,
 };
 const CONDICIONES_IVA = ['Responsable Inscripto', 'Monotributista', 'Exento', 'Consumidor Final', 'No Responsable'];
 
@@ -103,6 +103,12 @@ export default function ClienteForm() {
             {CONDICIONES_IVA.map((c) => <option key={c}>{c}</option>)}
           </select>
         </Campo>
+        <div className="sm:col-span-2">
+          <label className="flex items-start gap-2 text-sm">
+            <input type="checkbox" className="mt-0.5" checked={f.recordatorios !== false} onChange={(e) => setF({ ...f, recordatorios: e.target.checked })} />
+            <span>Enviarle recordatorios por email de vencimientos y honorarios pendientes <span className="text-slate-500">(solo si tiene email y el administrador activó los recordatorios en <em>Avisos</em>)</span></span>
+          </label>
+        </div>
         <Campo etiqueta="Abono mensual (honorarios, en $)" error={err('abonoMensual')}>
           <input type="number" step="0.01" min="0" className="campo" placeholder="Ej. 85000" value={f.abonoMensual} onChange={set('abonoMensual')} />
         </Campo>

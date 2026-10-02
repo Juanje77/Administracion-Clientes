@@ -58,6 +58,10 @@ estáticos y la API corre como función en `/api/*`.
    | `JWT_SECRET` | un texto largo y aleatorio (`node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`) |
    | `FIREBASE_SERVICE_ACCOUNT` | el **contenido completo** del archivo `.json` de la cuenta de servicio, pegado tal cual |
    | `FIREBASE_STORAGE_BUCKET` | nombre del bucket de Storage (solo para los documentos adjuntos) |
+   | `SMTP_USER` / `SMTP_PASS` | tu cuenta de Gmail y su *contraseña de aplicación* (solo para los avisos por email) |
+   | `ESTUDIO_NOMBRE` | nombre que aparece en los emails (ej. `Estudio Costantini`) |
+   | `APP_URL` | dirección del sistema, para el botón "Abrir la agenda" de los resúmenes |
+   | `CRON_SECRET` | texto largo aleatorio: protege el envío automático diario |
    | `TZ_NEGOCIO` | opcional; por defecto `America/Argentina/Buenos_Aires` |
 3. *Deploy*. Cada `git push` a la rama de producción vuelve a desplegar solo.
 4. El primer administrador se crea una sola vez desde tu PC con `npm run seed` (apunta a tu Firestore real).
@@ -86,6 +90,7 @@ npm test                        # levanta el emulador de Firestore automáticame
 - `vencimientos/{clienteId_impuesto_período}`: impuesto, período, `vence`, estado (PENDIENTE/PRESENTADO). El ID evita duplicados.
 - `honorarios/{id}`: clienteId, período, concepto, monto, pagado, saldo; y `pagos/{id}` (honorarioId, clienteId, fecha, monto, medio, nota)
 - `documentos/{id}`: clienteId, nombre, categoría, tipo, tamaño, ruta en Storage, quién lo subió
+- `config/avisos`, `envios/{clave}` (historial y reserva anti-duplicados) y `avisosCliente/{clienteId}` (último aviso de deuda)
 - `calendarios/{AAAA-MM}`: filas del calendario mensual con la fecha para cada terminación de CUIT (0–9)
 
 Firestore no busca texto parcial, así que el servidor guarda la lista de clientes en memoria y filtra/ordena ahí.
@@ -104,6 +109,29 @@ solo lo pendiente sin leer el historial.
 - **Vencimientos impositivos:** se cargan a mano por cliente o, mejor, se generan solos desde el **Calendario** (abajo).
 - "Hoy" se calcula en horario de Argentina; se cambia con la variable `TZ_NEGOCIO` del `.env`.
 - **Mi cuenta:** cada usuario puede cambiar su contraseña (clic en tu nombre, arriba a la derecha).
+
+## Avisos por email
+Cada mañana de **lunes a viernes (8:00 hs, hora de Argentina)** el sistema envía:
+- **Resumen al equipo:** a cada usuario, sus tareas y los vencimientos impositivos (vencidos, de hoy y de la semana); a los administradores, además, los deudores.
+  Solo se envía si hay algo pendiente, y cada persona puede apagarlo en *Mi cuenta*.
+- **Recordatorio de vencimientos a clientes** (opcional): un email con sus vencimientos de los próximos días (3 por defecto), **una sola vez por vencimiento**.
+- **Recordatorio de honorarios a clientes** (opcional): los meses atrasados que debe, con el texto de cómo pagar que cargues; se repite como máximo cada 15 días por cliente.
+
+**Resguardos:** los avisos a clientes vienen **apagados**; los activa un administrador en *Avisos*, donde también hay *correo de prueba*, *vista previa* de lo que saldría hoy
+y un historial de envíos. Un cliente solo recibe avisos si está **activo**, tiene **email** y su casilla "recordatorios" (en su ficha) está marcada. Cada envío se reserva antes
+de mandarse, así que reintentar o apretar "Enviar ahora" dos veces no duplica nada; si un envío falla se reintenta en la siguiente ejecución. Los correos a clientes llevan el aviso
+"si no desea recibir más, responda este correo".
+
+**Configurar Gmail:** en tu cuenta de Google activa la *verificación en dos pasos* y crea una *contraseña de aplicación* (myaccount.google.com/apppasswords).
+Esa clave de 16 letras es `SMTP_PASS` y tu dirección de Gmail es `SMTP_USER` (por defecto se usa `smtp.gmail.com`, puerto 465; se cambian con `SMTP_HOST` y `SMTP_PORT`).
+Opcionales: `MAIL_FROM` (remitente completo) y `MAIL_REPLY_TO` (a dónde llegan las respuestas de los clientes).
+
+**Envío automático en Vercel:** `vercel.json` ya incluye el cron (`0 11 * * 1-5`, que son las 8:00 de Argentina). Solo hace falta cargar `CRON_SECRET`; Vercel lo envía solo al llamar.
+En el plan gratuito de Vercel los crons corren una vez por día con una ventana de hasta una hora. Sin `CRON_SECRET` el cron queda cerrado, pero puedes usar *Enviar ahora* a mano.
+
+**Límites:** una cuenta de Gmail común permite unos 500 destinatarios por día y puede mandar a spam si se envía mucho: para muchos clientes conviene una cuenta
+de Google Workspace o un dominio propio. Cada ejecución se corta a los ~22 segundos para respetar el tiempo máximo de la función; lo que quede sale en la siguiente.
+El historial (`envios`) no guarda el contenido de los correos y no se borra solo.
 
 ## Documentos adjuntos
 En la ficha de cada cliente: subir contratos, presupuestos, facturas, constancias o balances (PDF, imágenes, Word, Excel, CSV o texto; máx. 4 MB).

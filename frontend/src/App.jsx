@@ -13,6 +13,7 @@ import Calendario from './paginas/Calendario';
 import Importar from './paginas/Importar';
 import Honorarios from './paginas/Honorarios';
 import Inicio from './paginas/Inicio';
+import Avisos from './paginas/Avisos';
 
 function Layout({ children }) {
   const { usuario, logout } = useAuth();
@@ -42,6 +43,7 @@ function Layout({ children }) {
             <NavLink to="/clientes" className={enlace}>Clientes</NavLink>
             <NavLink to="/honorarios" className={enlace}>Honorarios</NavLink>
             <NavLink to="/calendario" className={enlace}>Calendario</NavLink>
+            {usuario.rol === 'ADMIN' && <NavLink to="/avisos" className={enlace}>Avisos</NavLink>}
             {usuario.rol === 'ADMIN' && <NavLink to="/usuarios" className={enlace}>Usuarios</NavLink>}
           </nav>
           <div className="ml-auto flex items-center gap-3 text-sm">
@@ -74,6 +76,7 @@ export default function App() {
         <Route path="/clientes/:id/editar" element={<ClienteForm />} />
         {usuario.rol === 'ADMIN' && <Route path="/usuarios" element={<Usuarios />} />}
         {usuario.rol === 'ADMIN' && <Route path="/importar" element={<Importar />} />}
+        {usuario.rol === 'ADMIN' && <Route path="/avisos" element={<Avisos />} />}
         <Route path="*" element={<Navigate to="/inicio" replace />} />
       </Routes>
     </Layout>

@@ -112,7 +112,7 @@ router.post('/:periodo/aplicar', async (req, res) => {
         lote.create(refs[i + j], { ...p.datos, estado: 'PENDIENTE', presentadoEn: null, creadoEn: new Date(), ...alertaVencimiento({ ...p.datos, estado: 'PENDIENTE' }) });
         creados++;
       } else if (previo.data().estado === 'PENDIENTE' && previo.data().vence !== p.datos.vence) {
-        lote.update(refs[i + j], { vence: p.datos.vence, impuesto: p.datos.impuesto, ...alertaVencimiento({ vence: p.datos.vence, estado: 'PENDIENTE' }) });
+        lote.update(refs[i + j], { vence: p.datos.vence, impuesto: p.datos.impuesto, avisadoEn: null, ...alertaVencimiento({ vence: p.datos.vence, estado: 'PENDIENTE' }) }); // fecha nueva: se vuelve a avisar
         actualizados++;
       } else sinCambios++;
     });

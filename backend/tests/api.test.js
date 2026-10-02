@@ -746,3 +746,245 @@ describe('errores inesperados', () => {
     await user.get('/api/tareas').expect(200); // el servidor sigue funcionando
   });
 });
+
+// ---------- Avisos por email ----------
+describe('avisos por email', () => {
+  const correo = require('../src/correo/transporte');
+  const A = require('../src/servicios/avisos');
+  const enviados = [];
+  const fallar = new Set();
+  const [anio, mes] = hoy().split('-').map(Number);
+  const mesPrevio = (() => { const d = new Date(Date.UTC(anio, mes - 2, 1)); return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`; })();
+  const c = {};
+  let luis;
+  const para = (to) => enviados.filter((m) => m.to === to);
+  const corrida = async (opciones) => { const antes = enviados.length; const r = await A.ejecutar(opciones); return { ...r, mails: enviados.slice(antes) }; };
+
+  beforeAll(async () => {
+    luis = await login('luis@t.com', 'clave12345');
+    correo.usarTransporteDePrueba({ sendMail: async (m) => { if (fallar.has(m.to)) throw new Error('SMTP caído'); enviados.push(m); } });
+    for (const col of ['clientes', 'cuits', 'honorarios', 'pagos', 'tareas', 'vencimientos', 'envios', 'avisosCliente', 'config']) await db.recursiveDelete(db.collection(col));
+    await invalidar();
+    const nuevo = async (nombre, cuit, extra = {}) => (await admin.post('/api/clientes').send({ razonSocial: nombre, cuit: cuitDe(cuit), condicionIva: 'RI', estado: 'ACTIVO', ...extra }).expect(201)).body.id;
+    c.deuda = await nuevo('Cli <b>Deuda</b>', '2066666666', { email: 'deuda@c.com' });
+    c.sinMail = await nuevo('Cli SinMail', '2077777777');
+    c.noRec = await nuevo('Cli NoRecord', '2088888888', { email: 'norec@c.com', recordatorios: false });
+    c.pot = (await admin.post('/api/clientes').send({ razonSocial: 'Cli Potencial', email: 'pot@c.com' }).expect(201)).body.id;
+    c.venc = await nuevo('Cli Venc', '2014141414', { email: 'venc@c.com' });
+    for (const id of [c.deuda, c.sinMail, c.noRec, c.pot]) {
+      await admin.post('/api/honorarios').send({ clienteId: id, periodo: mesPrevio, concepto: 'Honorarios mensuales', monto: 50000 }).expect(201);
+    }
+    await admin.post('/api/honorarios').send({ clienteId: c.deuda, periodo: hoy().slice(0, 7), concepto: 'Mes en curso', monto: 20000 }).expect(201);
+    const ven = (clienteId, impuesto, dias) => admin.post('/api/vencimientos').send({ clienteId, impuesto, periodo: hoy().slice(0, 7), vence: sumarDias(hoy(), dias) }).expect(201);
+    await ven(c.venc, 'IVA DDJJ', 2); await ven(c.venc, 'Ganancias lejana', 10); await ven(c.venc, 'Autónomos atrasado', -1);
+    const presentado = (await ven(c.venc, 'Monotributo presentado', 1)).body;
+    await admin.patch(`/api/vencimientos/${presentado.id}`).send({ estado: 'PRESENTADO' }).expect(200);
+    const ana = (await admin.get('/api/usuarios').expect(200)).body.find((u) => u.email === 'ana@t.com');
+    await admin.post('/api/tareas').send({ clienteId: c.venc, titulo: 'Tarea vencida de Ana', vence: sumarDias(hoy(), -2), asignadoA: ana.id }).expect(201);
+    await admin.post('/api/tareas').send({ clienteId: c.venc, titulo: 'Tarea de hoy de Ana', vence: hoy(), asignadoA: ana.id }).expect(201);
+    c.ana = ana.id;
+  });
+  afterAll(() => correo.usarTransporteDePrueba(null));
+
+  it('solo los administradores gestionan los avisos', async () => {
+    await user.get('/api/avisos/config').expect(403);
+    await user.post('/api/avisos/ejecutar').expect(403);
+    await user.get('/api/avisos/historial').expect(403);
+    await request(app).get('/api/avisos/config').expect(401);
+  });
+
+  it('trae valores seguros por defecto y valida la configuración', async () => {
+    const r = (await admin.get('/api/avisos/config').expect(200)).body;
+    expect(r.config).toMatchObject({ equipoActivo: true, clientesDeuda: false, clientesVencimientos: false, diasEntreAvisosDeuda: 15, diasAnticipoVencimiento: 3 });
+    expect(r.correo.configurado).toBe(true);
+    const base = { ...r.config };
+    await admin.put('/api/avisos/config').send({ ...base, diasEntreAvisosDeuda: 0 }).expect(400);
+    await admin.put('/api/avisos/config').send({ ...base, diasAnticipoVencimiento: 99 }).expect(400);
+    await admin.put('/api/avisos/config').send({ ...base, clientesDeuda: 'si' }).expect(400);
+  });
+
+  it('envía un correo de prueba al administrador', async () => {
+    await admin.post('/api/avisos/prueba').expect(200);
+    expect(para('admin@t.com')[0].subject).toMatch(/^Prueba de correo/);
+    enviados.length = 0;
+  });
+
+  it('la vista previa no envía nada y, con los clientes apagados, solo planifica al equipo', async () => {
+    const r = (await admin.get('/api/avisos/vista-previa').expect(200)).body;
+    expect(r).toMatchObject({ simulacion: true, total: 3, porTipo: { equipo: 3 } });
+    expect(r.mensajes.map((m) => m.to).sort()).toEqual(['admin@t.com', 'ana@t.com', 'luis@t.com']);
+    expect(enviados).toHaveLength(0);
+  });
+
+  it('envía el resumen a cada integrante con lo que le corresponde, escapando HTML', async () => {
+    const r = (await admin.post('/api/avisos/ejecutar').expect(200)).body;
+    expect(r).toMatchObject({ enviados: 3, yaEnviados: 0, errores: [] });
+    const ana = para('ana@t.com')[0];
+    expect(ana.text).toContain('Tarea vencida de Ana');
+    expect(ana.text).toContain('Tarea de hoy de Ana');
+    expect(ana.subject).toMatch(/urgentes/);
+    expect(ana.html).not.toContain('Clientes con deuda'); // la deuda es solo para administradores
+    const adm = para('admin@t.com')[0];
+    expect(adm.html).toContain('Clientes con deuda');
+    expect(adm.html).toContain('&lt;b&gt;Deuda&lt;/b&gt;'); // el nombre del cliente va escapado
+    expect(adm.html).not.toContain('<b>Deuda</b>');
+    expect(adm.text).not.toContain('Tarea vencida de Ana'); // las tareas son de cada usuario
+    expect(para('luis@t.com')[0].text).toContain('IVA DDJJ');
+    expect(para('luis@t.com')[0].text).not.toContain('Tarea de hoy');
+    expect(para('luis@t.com')[0].html).not.toContain('Clientes con deuda');
+  });
+
+  it('no repite el envío si se ejecuta de nuevo el mismo día', async () => {
+    const r = (await corrida()).mails;
+    expect(r).toHaveLength(0);
+    expect((await admin.post('/api/avisos/ejecutar').expect(200)).body).toMatchObject({ enviados: 0, yaEnviados: 3 });
+  });
+
+  it('respeta la preferencia de cada usuario', async () => {
+    await luis.patch('/api/auth/preferencias').send({ avisos: false }).expect(200);
+    await luis.patch('/api/auth/preferencias').send({ avisos: 'no' }).expect(400);
+    const r = await corrida({ hoy: sumarDias(hoy(), 1) }); // "mañana": otra clave diaria
+    expect(r.mails.map((m) => m.to).sort()).toEqual(['admin@t.com', 'ana@t.com']);
+    await luis.patch('/api/auth/preferencias').send({ avisos: true }).expect(200);
+  });
+
+  it('no escribe a clientes mientras estén apagados', async () => {
+    expect(enviados.filter((m) => /@c\.com$/.test(m.to))).toHaveLength(0);
+  });
+
+  it('recordatorio de deuda: solo clientes activos, con email, que lo permiten y por lo atrasado', async () => {
+    const base = (await admin.get('/api/avisos/config')).body.config;
+    await admin.put('/api/avisos/config').send({ ...base, clientesDeuda: true, textoPago: 'Transferir al CBU <1234>\nGracias' }).expect(200);
+    const r = await corrida();
+    const mails = r.mails.filter((m) => /@c\.com$/.test(m.to));
+    expect(mails.map((m) => m.to)).toEqual(['deuda@c.com']); // no sinMail, ni norec, ni potencial
+    const m = mails[0];
+    expect(m.subject).toMatch(/Honorarios pendientes/);
+    expect(m.text.replace(/\u00a0/g, ' ')).toContain('Total adeudado: $ 50.000,00'); // no suma el mes en curso (el importe usa espacio de no separación)
+    expect(m.html).not.toContain('Mes en curso');
+    expect(m.html).toContain('Transferir al CBU &lt;1234&gt;');
+    expect(m.html).toContain('Cli &lt;b&gt;Deuda&lt;/b&gt;');
+    expect(m.html).toMatch(/ignore este mensaje/);
+    expect(m.text).toMatch(/responda a este correo y lo daremos de baja/); // el pie también va en la versión de texto
+  });
+
+  it('respeta la pausa entre avisos de deuda del mismo cliente', async () => {
+    const aviso = async (dias) => (await corrida({ hoy: sumarDias(hoy(), dias) })).mails.filter((m) => m.to === 'deuda@c.com');
+    expect(await aviso(1)).toHaveLength(0);   // pasó 1 día de 15
+    expect(await aviso(14)).toHaveLength(0);
+    expect(await aviso(16)).toHaveLength(1);  // ya pasaron 15 días
+    expect(await aviso(17)).toHaveLength(0);
+  });
+
+  it('recordatorio de vencimientos: solo los próximos, una sola vez', async () => {
+    const base = (await admin.get('/api/avisos/config')).body.config;
+    await admin.put('/api/avisos/config').send({ ...base, clientesVencimientos: true, diasAnticipoVencimiento: 3 }).expect(200);
+    const r = await corrida();
+    const m = r.mails.filter((x) => x.to === 'venc@c.com');
+    expect(m).toHaveLength(1);
+    expect(m[0].text).toContain('IVA DDJJ');
+    expect(m[0].text).toContain(sumarDias(hoy(), 2).split('-').reverse().join('/'));
+    for (const fuera of ['Ganancias lejana', 'Autónomos atrasado', 'Monotributo presentado']) expect(m[0].text).not.toContain(fuera);
+    expect((await corrida()).mails.filter((x) => x.to === 'venc@c.com')).toHaveLength(0); // ya avisado
+    const venc = (await admin.get(`/api/vencimientos?clienteId=${c.venc}`)).body.find((v) => v.impuesto === 'IVA DDJJ');
+    expect(venc.avisadoEn).toBe(hoy());
+  });
+
+  it('un fallo de envío no frena a los demás y se reintenta después', async () => {
+    const nuevo = (nombre, cuit, email) => admin.post('/api/clientes').send({ razonSocial: nombre, cuit: cuitDe(cuit), condicionIva: 'RI', estado: 'ACTIVO', email }).expect(201);
+    const f = (await nuevo('Cli Falla', '2015151515', 'falla@c.com')).body.id;
+    const ok = (await nuevo('Cli Ok2', '2013131313', 'ok2@c.com')).body.id;
+    for (const id of [f, ok]) await admin.post('/api/vencimientos').send({ clienteId: id, impuesto: 'IVA mañana', periodo: hoy().slice(0, 7), vence: sumarDias(hoy(), 1) }).expect(201);
+    fallar.add('falla@c.com');
+    const r1 = await corrida();
+    expect(r1.errores).toEqual([{ to: 'falla@c.com', error: 'SMTP caído' }]);
+    expect(r1.mails.map((m) => m.to)).toContain('ok2@c.com');
+    expect((await admin.get(`/api/vencimientos?clienteId=${f}`)).body[0].avisadoEn ?? null).toBeNull(); // no se marcó como avisado
+    fallar.clear();
+    const r2 = await corrida();
+    expect(r2.mails.map((m) => m.to)).toEqual(['falla@c.com']); // reintenta solo el que falló
+    expect(r2.errores).toEqual([]);
+  });
+
+  it('el cron exige credencial y nunca corre sin CRON_SECRET', async () => {
+    delete process.env.CRON_SECRET;
+    await request(app).get('/api/cron/avisos').expect(503);
+    process.env.CRON_SECRET = 'secreto-cron-de-prueba-123';
+    try {
+      await request(app).get('/api/cron/avisos').expect(401);
+      await request(app).get('/api/cron/avisos').set('Authorization', 'Bearer otro').expect(401);
+      await request(app).get('/api/cron/avisos').set('Authorization', `Bearer ${process.env.CRON_SECRET}`.slice(0, -1)).expect(401);
+      const r = await request(app).get('/api/cron/avisos').set('Authorization', `Bearer ${process.env.CRON_SECRET}`).expect(200);
+      expect(r.body).toMatchObject({ enviados: 0, errores: [] });
+    } finally {
+      delete process.env.CRON_SECRET;
+    }
+  });
+
+  it('el historial muestra los envíos y su resultado', async () => {
+    const h = (await admin.get('/api/avisos/historial').expect(200)).body;
+    expect(h.length).toBeGreaterThan(5);
+    expect(h[0]).toHaveProperty('asunto');
+    expect(h.every((x) => ['enviado', 'error', 'enviando'].includes(x.estado))).toBe(true);
+    expect(JSON.stringify(h)).not.toMatch(/<html/); // no se guarda el contenido de los correos
+  });
+
+  it('con un límite de tiempo agotado deja los envíos pendientes sin reclamarlos', async () => {
+    const r = await A.ejecutar({ hoy: sumarDias(hoy(), 40), limiteMs: -1 });
+    expect(r.enviados).toBe(0);
+    expect(r.pendientes).toBeGreaterThan(0);
+    const ok = await A.ejecutar({ hoy: sumarDias(hoy(), 40) }); // después sí sale todo
+    expect(ok.enviados).toBe(r.pendientes);
+  });
+
+  it('sin SMTP configurado avisa con claridad y no rompe', async () => {
+    correo.usarTransporteDePrueba(null);
+    const guardado = { u: process.env.SMTP_USER, p: process.env.SMTP_PASS };
+    delete process.env.SMTP_USER; delete process.env.SMTP_PASS;
+    try {
+      expect((await admin.get('/api/avisos/config')).body.correo.configurado).toBe(false);
+      expect((await admin.post('/api/avisos/prueba').expect(503)).body.error).toContain('SMTP_USER');
+      expect((await admin.post('/api/avisos/ejecutar').expect(503)).body.error).toContain('SMTP_USER');
+      await admin.get('/api/avisos/vista-previa').expect(200); // la vista previa sí funciona
+    } finally {
+      if (guardado.u) process.env.SMTP_USER = guardado.u;
+      if (guardado.p) process.env.SMTP_PASS = guardado.p;
+    }
+  });
+});
+
+// ---------- Envío SMTP real contra un servidor local de prueba ----------
+describe('transporte SMTP real', () => {
+  it('entrega un correo bien formado (tildes, HTML y texto) con la autenticación configurada', async () => {
+    const { SMTPServer } = require('smtp-server');
+    const { simpleParser } = require('mailparser');
+    const correo = require('../src/correo/transporte');
+    const P = require('../src/correo/plantillas');
+    const recibidos = [];
+    const servidor = new SMTPServer({
+      authOptional: false, allowInsecureAuth: true, disabledCommands: ['STARTTLS'],
+      onAuth: (a, _s, cb) => (a.username === 'estudio@gmail.test' && a.password === 'clave-de-app' ? cb(null, { user: a.username }) : cb(new Error('Credenciales inválidas'))),
+      onData: (stream, _s, cb) => { simpleParser(stream).then((m) => { recibidos.push(m); cb(); }); },
+    });
+    await new Promise((r) => servidor.listen(0, '127.0.0.1', r));
+    const guardado = { ...process.env };
+    Object.assign(process.env, { SMTP_HOST: '127.0.0.1', SMTP_PORT: String(servidor.server.address().port), SMTP_USER: 'estudio@gmail.test', SMTP_PASS: 'clave-de-app', ESTUDIO_NOMBRE: 'Estudio Pérez & Asociados', MAIL_REPLY_TO: 'consultas@estudio.test' });
+    correo.usarTransporteDePrueba(null);
+    try {
+      const m = P.recordatorioVencimientos({ cliente: 'José Núñez <S.A.>', estudio: correo.estudio(), items: [{ impuesto: 'IVA – DDJJ', vence: '2026-10-19', dias: 2 }] });
+      await correo.enviar({ to: 'cliente@ejemplo.test', subject: m.subject, html: m.html, text: m.text });
+      expect(recibidos).toHaveLength(1);
+      const r = recibidos[0];
+      expect(r.subject).toBe('Vencimientos próximos - Estudio Pérez & Asociados');
+      expect(r.from.value[0]).toMatchObject({ name: 'Estudio Pérez & Asociados', address: 'estudio@gmail.test' });
+      expect(r.to.value[0].address).toBe('cliente@ejemplo.test');
+      expect(r.replyTo.value[0].address).toBe('consultas@estudio.test');
+      expect(r.html).toContain('José Núñez &lt;S.A.&gt;');
+      expect(r.html).toContain('vence el 19/10/2026');
+      expect(r.text).toContain('IVA – DDJJ: vence el 19/10/2026');
+    } finally {
+      await new Promise((r) => servidor.close(r));
+      for (const k of ['SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASS', 'ESTUDIO_NOMBRE', 'MAIL_REPLY_TO']) { if (guardado[k] === undefined) delete process.env[k]; else process.env[k] = guardado[k]; }
+    }
+  });
+});

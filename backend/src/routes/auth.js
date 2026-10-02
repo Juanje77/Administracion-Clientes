@@ -13,7 +13,7 @@ const limitador = rateLimit({
   legacyHeaders: false,
 });
 
-const publico = (id, u) => ({ id, nombre: u.nombre, email: u.email, rol: u.rol });
+const publico = (id, u) => ({ id, nombre: u.nombre, email: u.email, rol: u.rol, avisos: u.avisos !== false });
 
 router.post('/login', limitador, async (req, res) => {
   const email = String(req.body.email || '').trim().toLowerCase();
@@ -40,6 +40,14 @@ router.get('/me', requiereLogin, async (req, res) => {
   const doc = await db.collection('usuarios').doc(req.usuario.id).get();
   if (!doc.exists || !doc.data().activo) return res.status(401).json({ error: 'No autenticado' });
   res.json(publico(doc.id, doc.data()));
+});
+
+// Preferencias del propio usuario (por ahora: recibir el resumen diario por email)
+router.patch('/preferencias', requiereLogin, async (req, res) => {
+  if (typeof req.body.avisos !== 'boolean') return res.status(400).json({ error: 'Datos inválidos' });
+  const ref = db.collection('usuarios').doc(req.usuario.id);
+  await ref.update({ avisos: req.body.avisos });
+  res.json(publico(ref.id, (await ref.get()).data()));
 });
 
 router.post('/password', requiereLogin, limitador, async (req, res) => {

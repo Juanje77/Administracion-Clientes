@@ -28,6 +28,9 @@ app.use('/api/honorarios', requiereLogin, require('./routes/honorarios'));
 app.use('/api/dashboard', requiereLogin, require('./routes/dashboard'));
 app.use('/api/exportar', requiereLogin, require('./routes/exportar'));
 app.use('/api/documentos', requiereLogin, require('./routes/documentos'));
+app.use('/api/avisos', requiereLogin, require('./routes/avisos'));
+// El cron no usa sesión: se autentica con CRON_SECRET (ver routes/cron.js)
+app.use('/api/cron', require('./routes/cron'));
 
 // En producción el mismo servidor entrega el frontend compilado.
 const dist = path.join(__dirname, '../../frontend/dist');
