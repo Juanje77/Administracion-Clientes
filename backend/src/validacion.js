@@ -58,4 +58,51 @@ const usuarioSchema = z.object({
   rol: z.enum(['ADMIN', 'USUARIO']).default('USUARIO'),
 });
 
-module.exports = { cuitValido, clienteSchema, interaccionSchema, usuarioSchema };
+// Fecha "AAAA-MM-DD" que exista de verdad (rechaza 2026-02-31).
+const fecha = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Fecha inválida (AAAA-MM-DD)')
+  .refine((s) => new Date(`${s}T00:00:00Z`).toISOString().slice(0, 10) === s, 'Fecha inválida');
+const periodo = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'Período inválido (AAAA-MM)');
+
+const tareaSchema = z.object({
+  clienteId: z.string().min(1, 'Elige un cliente'),
+  titulo: z.string().trim().min(2, 'El título es obligatorio'),
+  descripcion: opcional(z.string().trim()),
+  vence: fecha,
+  asignadoA: opcional(z.string().min(1)),
+});
+const tareaCambiosSchema = tareaSchema
+  .omit({ clienteId: true })
+  .partial()
+  .extend({ hecha: z.boolean().optional() });
+
+const vencimientoSchema = z.object({
+  clienteId: z.string().min(1, 'Elige un cliente'),
+  impuesto: z.string().trim().min(2, 'El impuesto es obligatorio'),
+  periodo,
+  vence: fecha,
+  notas: opcional(z.string().trim()),
+});
+
+// Grupos de terminación de CUIT usados por el calendario impositivo.
+const GRUPOS_CUIT = ['0-1', '2-3', '4-5', '6-7', '8-9'];
+const generarSchema = z.object({
+  impuesto: z.string().trim().min(2, 'El impuesto es obligatorio'),
+  periodo,
+  fechas: z
+    .partialRecord(z.enum(GRUPOS_CUIT), fecha)
+    .refine((f) => Object.keys(f).length > 0, 'Indica al menos una fecha'),
+  etiqueta: opcional(z.string().trim()),
+  incluirInactivos: z.boolean().default(false),
+});
+
+const passwordSchema = z.object({
+  actual: z.string().min(1, 'Ingresa tu contraseña actual'),
+  nueva: z.string().min(8, 'Mínimo 8 caracteres'),
+});
+
+module.exports = {
+  cuitValido, clienteSchema, interaccionSchema, usuarioSchema,
+  tareaSchema, tareaCambiosSchema, vencimientoSchema, generarSchema, passwordSchema, GRUPOS_CUIT,
+};

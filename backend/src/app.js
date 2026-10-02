@@ -14,6 +14,9 @@ app.get('/api/salud', (_req, res) => res.json({ ok: true }));
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/clientes', requiereLogin, require('./routes/clientes'));
 app.use('/api/usuarios', requiereLogin, require('./routes/usuarios'));
+app.use('/api/tareas', requiereLogin, require('./routes/tareas'));
+app.use('/api/vencimientos', requiereLogin, require('./routes/vencimientos'));
+app.use('/api/alertas', requiereLogin, require('./routes/alertas'));
 
 // En producción el mismo servidor entrega el frontend compilado.
 const dist = path.join(__dirname, '../../frontend/dist');

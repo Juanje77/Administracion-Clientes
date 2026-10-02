@@ -3,6 +3,8 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../auth';
 import Estado from '../componentes/Estado';
+import TareasCliente from '../componentes/TareasCliente';
+import VencimientosCliente from '../componentes/VencimientosCliente';
 
 const TIPOS = { LLAMADA: 'Llamada', REUNION: 'Reunión', MENSAJE: 'Mensaje', NOTA: 'Nota' };
 const fecha = (d) => new Date(d).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' });
@@ -86,6 +88,9 @@ export default function ClienteDetalle() {
         </dl>
         {c.notas && <p className="mt-4 whitespace-pre-wrap rounded bg-slate-50 p-3 text-sm">{c.notas}</p>}
       </section>
+
+      <TareasCliente clienteId={id} />
+      <VencimientosCliente clienteId={id} />
 
       <section className="rounded-lg border bg-white p-4 sm:p-6">
         <h2 className="mb-3 font-semibold">Historial de interacciones</h2>

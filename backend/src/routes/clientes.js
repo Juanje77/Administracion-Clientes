@@ -136,6 +136,10 @@ router.delete('/:id', async (req, res) => {
     return requiereAdmin(req, res, async () => {
       const clave = claveCuit(doc.data().cuit);
       await db.recursiveDelete(ref); // borra también el historial (subcolección)
+      for (const col of ['tareas', 'vencimientos']) {
+        const huerfanos = await db.collection(col).where('clienteId', '==', req.params.id).get();
+        await Promise.all(huerfanos.docs.map((d) => d.ref.delete()));
+      }
       if (clave) await refCuit(clave).delete();
       invalidar();
       res.status(204).end();

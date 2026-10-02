@@ -6,6 +6,13 @@ const { usuarioSchema } = require('../validacion');
 
 const publico = (id, u) => ({ id, nombre: u.nombre, email: u.email, rol: u.rol, activo: u.activo });
 
+// Lista mínima del equipo (para asignar tareas); disponible para cualquier usuario con sesión.
+router.get('/equipo', async (_req, res) => {
+  const snap = await db.collection('usuarios').where('activo', '==', true).get();
+  const lista = snap.docs.map((d) => ({ id: d.id, nombre: d.data().nombre }));
+  res.json(lista.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')));
+});
+
 router.use(requiereAdmin);
 
 router.get('/', async (_req, res) => {

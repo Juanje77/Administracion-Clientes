@@ -1,13 +1,27 @@
+import { useEffect, useState } from 'react';
 import { Navigate, Route, Routes, NavLink } from 'react-router-dom';
+import { api } from './api';
 import { useAuth } from './auth';
 import Login from './paginas/Login';
 import Clientes from './paginas/Clientes';
 import ClienteForm from './paginas/ClienteForm';
 import ClienteDetalle from './paginas/ClienteDetalle';
 import Usuarios from './paginas/Usuarios';
+import Agenda from './paginas/Agenda';
+import Cuenta from './paginas/Cuenta';
 
 function Layout({ children }) {
   const { usuario, logout } = useAuth();
+  const [urgentes, setUrgentes] = useState(0);
+
+  // Aviso de pendientes urgentes (vencidos o de hoy): se refresca cada 2 min y tras cada cambio.
+  useEffect(() => {
+    const cargar = () => api('/alertas').then((a) => setUrgentes(a.urgentes)).catch(() => {});
+    cargar();
+    const t = setInterval(cargar, 120000);
+    window.addEventListener('alertas', cargar);
+    return () => { clearInterval(t); window.removeEventListener('alertas', cargar); };
+  }, []);
   const enlace = ({ isActive }) =>
     `rounded px-3 py-1.5 text-sm ${isActive ? 'bg-blue-100 text-blue-700' : 'text-slate-600 hover:bg-slate-100'}`;
   return (
@@ -16,11 +30,15 @@ function Layout({ children }) {
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-2 px-4 py-3">
           <span className="mr-4 font-semibold">Estudio Contable</span>
           <nav className="flex gap-1">
+            <NavLink to="/agenda" className={enlace}>
+              Agenda
+              {urgentes > 0 && <span className="ml-1.5 rounded-full bg-red-600 px-1.5 py-0.5 text-xs text-white" aria-label={`${urgentes} urgentes`}>{urgentes}</span>}
+            </NavLink>
             <NavLink to="/clientes" className={enlace}>Clientes</NavLink>
             {usuario.rol === 'ADMIN' && <NavLink to="/usuarios" className={enlace}>Usuarios</NavLink>}
           </nav>
           <div className="ml-auto flex items-center gap-3 text-sm">
-            <span className="text-slate-500">{usuario.nombre}</span>
+            <NavLink to="/cuenta" className="text-slate-500 hover:underline">{usuario.nombre}</NavLink>
             <button className="btn-sec" onClick={logout}>Salir</button>
           </div>
         </div>
@@ -37,13 +55,15 @@ export default function App() {
   return (
     <Layout>
       <Routes>
-        <Route path="/" element={<Navigate to="/clientes" replace />} />
+        <Route path="/" element={<Navigate to="/agenda" replace />} />
+        <Route path="/agenda" element={<Agenda />} />
+        <Route path="/cuenta" element={<Cuenta />} />
         <Route path="/clientes" element={<Clientes />} />
         <Route path="/clientes/nuevo" element={<ClienteForm />} />
         <Route path="/clientes/:id" element={<ClienteDetalle />} />
         <Route path="/clientes/:id/editar" element={<ClienteForm />} />
         {usuario.rol === 'ADMIN' && <Route path="/usuarios" element={<Usuarios />} />}
-        <Route path="*" element={<Navigate to="/clientes" replace />} />
+        <Route path="*" element={<Navigate to="/agenda" replace />} />
       </Routes>
     </Layout>
   );

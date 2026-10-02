@@ -54,6 +54,8 @@ cd backend && npm test          # levanta el emulador de Firestore automáticame
 - `clientes/{id}`: datos del cliente + `etiquetas` (lista de textos)
   - `interacciones/{id}` (subcolección): tipo, fecha, detalle, autor
 - `cuits/{11 dígitos}`: reserva que garantiza un CUIT único
+- `tareas/{id}`: clienteId, título, `vence` (AAAA-MM-DD), asignadoA, hecha
+- `vencimientos/{clienteId_impuesto_período}`: impuesto, período, `vence`, estado (PENDIENTE/PRESENTADO). El ID evita duplicados.
 
 Firestore no busca texto parcial, así que el servidor guarda la lista de clientes en memoria
 (se refresca al escribir y cada 60 s) y filtra/ordena ahí. Es adecuado para hasta unos pocos
@@ -63,6 +65,15 @@ miles de clientes y evita gastar lecturas.
 - **Administrador:** gestiona usuarios y puede eliminar clientes definitivamente.
 - **Usuario:** opera clientes e interacciones. "Eliminar" archiva (estado Inactivo).
 
+## Agenda, tareas y vencimientos (Etapa 2)
+- **Agenda:** pendientes vencidos, de hoy y de los próximos 7 días; el menú muestra un aviso rojo con la cantidad de urgentes.
+- **Tareas:** se crean dentro de cada cliente, con fecha límite y responsable.
+- **Vencimientos impositivos:** se cargan por cliente o se **generan en masa** (Agenda → *Generar vencimientos del mes*)
+  indicando la fecha del calendario de ARCA para cada terminación de CUIT (0-1, 2-3, 4-5, 6-7, 8-9).
+  Las fechas las cargas tú: el sistema no trae calendarios oficiales para no mostrarte datos desactualizados.
+- "Hoy" se calcula en horario de Argentina; se cambia con la variable `TZ_NEGOCIO` del `.env`.
+- **Mi cuenta:** cada usuario puede cambiar su contraseña (clic en tu nombre, arriba a la derecha).
+
 ## Hoja de ruta
-2. Tareas, vencimientos impositivos y alertas · 3. Honorarios y documentos ·
+3. Honorarios y documentos ·
 4. Dashboard, importar/exportar, backups · 5. Despliegue online.
