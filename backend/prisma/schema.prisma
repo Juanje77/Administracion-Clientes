@@ -1,0 +1,84 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Rol {
+  ADMIN
+  USUARIO
+}
+
+enum EstadoCliente {
+  ACTIVO
+  INACTIVO
+  POTENCIAL
+}
+
+enum TipoPersona {
+  FISICA
+  JURIDICA
+}
+
+enum TipoInteraccion {
+  LLAMADA
+  REUNION
+  MENSAJE
+  NOTA
+}
+
+model Usuario {
+  id           Int            @id @default(autoincrement())
+  nombre       String
+  email        String         @unique
+  passwordHash String
+  rol          Rol            @default(USUARIO)
+  activo       Boolean        @default(true)
+  creadoEn     DateTime       @default(now())
+  interacciones Interaccion[]
+}
+
+model Cliente {
+  id           Int            @id @default(autoincrement())
+  razonSocial  String
+  cuit         String?        @unique
+  email        String?
+  telefono     String?
+  direccion    String?
+  ciudad       String?
+  notas        String?
+  estado       EstadoCliente  @default(POTENCIAL)
+  tipoPersona  TipoPersona?
+  condicionIva String?
+  regimen      String?
+  creadoEn     DateTime       @default(now())
+  actualizadoEn DateTime      @updatedAt
+  etiquetas    Etiqueta[]
+  interacciones Interaccion[]
+
+  @@index([razonSocial])
+  @@index([estado])
+  @@index([ciudad])
+}
+
+model Etiqueta {
+  id       Int       @id @default(autoincrement())
+  nombre   String    @unique
+  clientes Cliente[]
+}
+
+model Interaccion {
+  id        Int             @id @default(autoincrement())
+  clienteId Int
+  cliente   Cliente         @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  usuarioId Int
+  usuario   Usuario         @relation(fields: [usuarioId], references: [id])
+  tipo      TipoInteraccion
+  fecha     DateTime        @default(now())
+  detalle   String
+
+  @@index([clienteId, fecha])
+}
