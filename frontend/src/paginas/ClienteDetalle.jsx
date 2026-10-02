@@ -5,6 +5,7 @@ import { useAuth } from '../auth';
 import Estado from '../componentes/Estado';
 import TareasCliente from '../componentes/TareasCliente';
 import VencimientosCliente from '../componentes/VencimientosCliente';
+import HonorariosCliente from '../componentes/HonorariosCliente';
 
 const TIPOS = { LLAMADA: 'Llamada', REUNION: 'Reunión', MENSAJE: 'Mensaje', NOTA: 'Nota' };
 const fecha = (d) => new Date(d).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' });
@@ -97,6 +98,7 @@ export default function ClienteDetalle() {
         {c.notas && <p className="mt-4 whitespace-pre-wrap rounded bg-slate-50 p-3 text-sm">{c.notas}</p>}
       </section>
 
+      <HonorariosCliente clienteId={id} abonoMensual={c.abonoMensual} />
       <TareasCliente clienteId={id} />
       <VencimientosCliente clienteId={id} />
 

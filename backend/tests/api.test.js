@@ -442,3 +442,91 @@ describe('importación de clientes', () => {
     expect(vista.resumen).toEqual({ total: 1, ok: 1, advertencias: 0, rechazadas: 0 });
   });
 });
+
+// ---------- Honorarios, cobros y saldos ----------
+describe('honorarios y cobros', () => {
+  const periodo = hoy().slice(0, 7);
+  const anterior = sumarDias(hoy(), -40).slice(0, 7);
+  const c = {};
+  let h; // honorario del cliente A en el período actual
+
+  beforeAll(async () => {
+    for (const col of ['clientes', 'cuits', 'honorarios']) await db.recursiveDelete(db.collection(col));
+    await invalidar();
+    const nuevo = (nombre, cuit, extra) => admin.post('/api/clientes').send({ razonSocial: nombre, cuit: cuitDe(cuit), condicionIva: 'RI', estado: 'ACTIVO', ...extra }).expect(201);
+    c.a = (await nuevo('Hon A', '2011111111', { abonoMensual: 100000 })).body.id;
+    c.b = (await nuevo('Hon B', '2022222222', { abonoMensual: '50000.50' })).body.id;
+    c.c = (await nuevo('Hon C sin abono', '2033333333', {})).body.id;
+    await admin.post('/api/clientes').send({ razonSocial: 'Hon Potencial', estado: 'POTENCIAL', abonoMensual: 999 }).expect(201);
+  });
+
+  it('valida el abono mensual del cliente', async () => {
+    await admin.post('/api/clientes').send({ razonSocial: 'Abono Malo', abonoMensual: -5 }).expect(400);
+    const r = await admin.post('/api/clientes').send({ razonSocial: 'Abono Vacío', abonoMensual: '' }).expect(201);
+    expect(r.body.abonoMensual).toBeNull();
+    expect((await admin.get(`/api/clientes/${c.b}`)).body.abonoMensual).toBe(50000.5);
+  });
+
+  it('genera el abono del mes solo para activos con abono, sin duplicar', async () => {
+    await user.post('/api/honorarios/generar').send({ periodo: '2026-13' }).expect(400);
+    expect((await user.post('/api/honorarios/generar').send({ periodo }).expect(201)).body).toMatchObject({ creados: 2, yaExistian: 0 });
+    expect((await user.post('/api/honorarios/generar').send({ periodo }).expect(201)).body).toMatchObject({ creados: 0, yaExistian: 2 });
+    const r = (await user.get(`/api/honorarios?periodo=${periodo}`).expect(200)).body;
+    expect(r.datos.map((x) => x.clienteNombre)).toEqual(['Hon A', 'Hon B']);
+    expect(r.totales).toEqual({ monto: 150000.5, pagado: 0, saldo: 150000.5 });
+    h = r.datos.find((x) => x.clienteId === c.a);
+    expect(h).toMatchObject({ concepto: 'Honorarios mensuales', estado: 'PENDIENTE', vencido: false });
+  });
+
+  it('registra cobros parciales y totales, y rechaza los inválidos', async () => {
+    const cobrar = (monto, extra = {}) => user.post(`/api/honorarios/${h.id}/pagos`).send({ monto, medio: 'TRANSFERENCIA', ...extra });
+    await cobrar(0).expect(400);
+    await cobrar(-5).expect(400);
+    await cobrar(10, { fecha: '2026-02-31' }).expect(400);
+    await cobrar(10, { medio: 'BITCOIN' }).expect(400);
+    const parcial = (await cobrar(40000.25, { nota: 'Primera cuota' }).expect(201)).body;
+    expect(parcial.honorario).toMatchObject({ pagado: 40000.25, saldo: 59999.75, estado: 'PARCIAL' });
+    await cobrar(70000).expect(400); // supera el saldo
+    const total = (await cobrar(59999.75, { medio: 'EFECTIVO' }).expect(201)).body;
+    expect(total.honorario).toMatchObject({ saldo: 0, estado: 'PAGADO' });
+    await cobrar(1).expect(400); // ya está saldado
+    expect((await user.get(`/api/honorarios/${h.id}/pagos`).expect(200)).body).toHaveLength(2);
+    expect((await user.get(`/api/honorarios?periodo=${periodo}&estado=PAGADO`).expect(200)).body.datos).toHaveLength(1);
+    c.pagoId = parcial.pago.id;
+  });
+
+  it('calcula deudores sumando períodos y marca lo vencido', async () => {
+    await user.post('/api/honorarios').send({ clienteId: c.b, periodo: anterior, concepto: 'Balance anual', monto: 20000 }).expect(201);
+    await user.post('/api/honorarios').send({ clienteId: c.b, periodo, concepto: 'X', monto: 0 }).expect(400);
+    const d = (await user.get('/api/honorarios/deudores').expect(200)).body;
+    expect(d.datos).toHaveLength(1);
+    expect(d.datos[0]).toMatchObject({ clienteNombre: 'Hon B', saldo: 70000.5, cantidad: 2, masAntiguo: anterior });
+    expect(d.total).toBe(70000.5);
+    const deuda = (await user.get('/api/honorarios?estado=DEUDA').expect(200)).body; // sin período: todo lo adeudado
+    expect(deuda.totales.saldo).toBe(70000.5);
+    expect(deuda.datos.find((x) => x.periodo === anterior).vencido).toBe(true);
+    expect((await user.get(`/api/honorarios?clienteId=${c.b}`).expect(200)).body.datos).toHaveLength(2);
+  });
+
+  it('edita montos sin bajar de lo cobrado y recalcula el saldo', async () => {
+    await user.patch(`/api/honorarios/${h.id}`).send({ monto: 90000 }).expect(400); // ya cobró 100000
+    const r = await user.patch(`/api/honorarios/${h.id}`).send({ monto: 120000 }).expect(200);
+    expect(r.body).toMatchObject({ monto: 120000, saldo: 20000, estado: 'PARCIAL' });
+    await user.patch('/api/honorarios/no-existe').send({ monto: 5 }).expect(404);
+  });
+
+  it('solo un administrador anula cobros y borra honorarios', async () => {
+    await user.delete(`/api/honorarios/${h.id}/pagos/${c.pagoId}`).expect(403);
+    await admin.delete(`/api/honorarios/${h.id}/pagos/${c.pagoId}`).expect(204);
+    const r = (await user.get(`/api/honorarios?clienteId=${c.a}`).expect(200)).body.datos[0];
+    expect(r).toMatchObject({ pagado: 59999.75, saldo: 60000.25 });
+    await user.delete(`/api/honorarios/${h.id}`).expect(403);
+    await admin.delete(`/api/honorarios/${h.id}`).expect(204);
+    expect((await user.get(`/api/honorarios/${h.id}/pagos`).expect(200)).body).toHaveLength(0);
+  });
+
+  it('al borrar un cliente definitivamente se borran sus honorarios', async () => {
+    await admin.delete(`/api/clientes/${c.b}?definitivo=true`).expect(204);
+    expect((await user.get('/api/honorarios/deudores').expect(200)).body.datos).toHaveLength(0);
+  });
+});

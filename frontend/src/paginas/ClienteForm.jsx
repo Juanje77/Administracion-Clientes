@@ -4,7 +4,7 @@ import { api, ErrorApi } from '../api';
 
 const VACIO = {
   razonSocial: '', cuit: '', email: '', telefono: '', direccion: '', ciudad: '', notas: '',
-  estado: 'POTENCIAL', tipoPersona: '', condicionIva: '', regimen: '', etiquetas: '', obligaciones: [],
+  estado: 'POTENCIAL', tipoPersona: '', condicionIva: '', regimen: '', etiquetas: '', obligaciones: [], abonoMensual: '',
 };
 const CONDICIONES_IVA = ['Responsable Inscripto', 'Monotributista', 'Exento', 'Consumidor Final', 'No Responsable'];
 
@@ -102,6 +102,9 @@ export default function ClienteForm() {
             <option value="">—</option>
             {CONDICIONES_IVA.map((c) => <option key={c}>{c}</option>)}
           </select>
+        </Campo>
+        <Campo etiqueta="Abono mensual (honorarios, en $)" error={err('abonoMensual')}>
+          <input type="number" step="0.01" min="0" className="campo" placeholder="Ej. 85000" value={f.abonoMensual} onChange={set('abonoMensual')} />
         </Campo>
         <Campo etiqueta="Régimen (Ganancias, IIBB, etc.)">
           <input className="campo" value={f.regimen} onChange={set('regimen')} />

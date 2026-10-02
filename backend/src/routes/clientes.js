@@ -136,9 +136,9 @@ router.delete('/:id', async (req, res) => {
     return requiereAdmin(req, res, async () => {
       const clave = claveCuit(doc.data().cuit);
       await db.recursiveDelete(ref); // borra también el historial (subcolección)
-      for (const col of ['tareas', 'vencimientos']) {
+      for (const col of ['tareas', 'vencimientos', 'honorarios']) {
         const huerfanos = await db.collection(col).where('clienteId', '==', req.params.id).get();
-        await Promise.all(huerfanos.docs.map((d) => d.ref.delete()));
+        await Promise.all(huerfanos.docs.map((d) => db.recursiveDelete(d.ref))); // honorarios incluye sus cobros
       }
       if (clave) await refCuit(clave).delete();
       await invalidar();

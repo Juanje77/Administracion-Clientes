@@ -35,6 +35,8 @@ const clienteSchema = z
     etiquetas: z.array(z.string().trim().min(1)).max(20).optional(),
     // Claves de las obligaciones del calendario impositivo que tiene este cliente.
     obligaciones: z.array(z.string().trim().min(1)).max(100).optional(),
+    // Honorario mensual pactado (en pesos). Vacío = sin abono.
+    abonoMensual: z.preprocess((v) => (v === '' || v === undefined ? null : v), z.coerce.number().min(0).max(1e9).nullable()).optional(),
   })
   .superRefine((c, ctx) => {
     // Datos fiscales obligatorios solo para clientes activos.
@@ -102,6 +104,27 @@ const calendarioSchema = z.object({
   filas: z.array(filaCalendarioSchema).min(1, 'El calendario no tiene filas').max(300),
 });
 
+const monto = z.coerce.number({ message: 'Monto inválido' }).positive('El monto debe ser mayor a 0').max(1e9, 'Monto demasiado grande')
+  .transform((n) => Math.round(n * 100) / 100);
+
+const honorarioSchema = z.object({
+  clienteId: z.string().min(1, 'Elige un cliente'),
+  periodo,
+  concepto: z.string().trim().min(2, 'El concepto es obligatorio').max(200),
+  monto,
+});
+const honorarioCambiosSchema = z.object({
+  concepto: z.string().trim().min(2).max(200).optional(),
+  monto: monto.optional(),
+});
+const MEDIOS_PAGO = ['EFECTIVO', 'TRANSFERENCIA', 'CHEQUE', 'TARJETA', 'OTRO'];
+const pagoSchema = z.object({
+  monto,
+  fecha: fecha.optional(),
+  medio: z.enum(MEDIOS_PAGO).default('TRANSFERENCIA'),
+  nota: opcional(z.string().trim().max(300)),
+});
+
 const passwordSchema = z.object({
   actual: z.string().min(1, 'Ingresa tu contraseña actual'),
   nueva: z.string().min(8, 'Mínimo 8 caracteres'),
@@ -110,4 +133,5 @@ const passwordSchema = z.object({
 module.exports = {
   cuitValido, clienteSchema, interaccionSchema, usuarioSchema,
   tareaSchema, tareaCambiosSchema, vencimientoSchema, calendarioSchema, passwordSchema, periodo,
+  honorarioSchema, honorarioCambiosSchema, pagoSchema,
 };

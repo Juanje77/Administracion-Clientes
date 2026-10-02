@@ -11,6 +11,7 @@ import Agenda from './paginas/Agenda';
 import Cuenta from './paginas/Cuenta';
 import Calendario from './paginas/Calendario';
 import Importar from './paginas/Importar';
+import Honorarios from './paginas/Honorarios';
 
 function Layout({ children }) {
   const { usuario, logout } = useAuth();
@@ -37,6 +38,7 @@ function Layout({ children }) {
               {urgentes > 0 && <span className="ml-1.5 rounded-full bg-red-600 px-1.5 py-0.5 text-xs text-white" aria-label={`${urgentes} urgentes`}>{urgentes}</span>}
             </NavLink>
             <NavLink to="/clientes" className={enlace}>Clientes</NavLink>
+            <NavLink to="/honorarios" className={enlace}>Honorarios</NavLink>
             <NavLink to="/calendario" className={enlace}>Calendario</NavLink>
             {usuario.rol === 'ADMIN' && <NavLink to="/usuarios" className={enlace}>Usuarios</NavLink>}
           </nav>
@@ -62,6 +64,7 @@ export default function App() {
         <Route path="/agenda" element={<Agenda />} />
         <Route path="/cuenta" element={<Cuenta />} />
         <Route path="/calendario" element={<Calendario />} />
+        <Route path="/honorarios" element={<Honorarios />} />
         <Route path="/clientes" element={<Clientes />} />
         <Route path="/clientes/nuevo" element={<ClienteForm />} />
         <Route path="/clientes/:id" element={<ClienteDetalle />} />
