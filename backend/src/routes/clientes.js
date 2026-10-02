@@ -1,6 +1,7 @@
 const router = require('express').Router();
 const { db, aObjeto } = require('../db');
 const { borrarDocumentosDeCliente } = require('./documentos');
+const { borrarHonorarios } = require('../servicios/resumenes');
 const { todosLosClientes, invalidar } = require('../cache');
 const { requiereAdmin } = require('../middleware/auth');
 const { clienteSchema, interaccionSchema } = require('../validacion');
@@ -115,7 +116,8 @@ router.delete('/:id', async (req, res) => {
       const clave = claveCuit(doc.data().cuit);
       await db.recursiveDelete(ref); // borra también el historial (subcolección)
       await borrarDocumentosDeCliente(req.params.id);
-      for (const col of ['tareas', 'vencimientos', 'honorarios', 'pagos']) {
+      await borrarHonorarios((await db.collection('honorarios').where('clienteId', '==', req.params.id).get()).docs); // con sus cobros y totales
+      for (const col of ['tareas', 'vencimientos', 'pagos']) {
         const huerfanos = await db.collection(col).where('clienteId', '==', req.params.id).get();
         await Promise.all(huerfanos.docs.map((d) => d.ref.delete()));
       }

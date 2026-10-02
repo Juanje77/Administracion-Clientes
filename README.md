@@ -91,6 +91,7 @@ npm test                        # levanta el emulador de Firestore automáticame
 - `honorarios/{id}`: clienteId, período, concepto, monto, pagado, saldo; y `pagos/{id}` (honorarioId, clienteId, fecha, monto, medio, nota)
 - `documentos/{id}`: clienteId, nombre, categoría, tipo, tamaño, ruta en Storage, quién lo subió
 - `config/avisos`, `envios/{clave}` (historial y reserva anti-duplicados) y `avisosCliente/{clienteId}` (último aviso de deuda)
+- `resumenes/{AAAA-MM}` (totales para el Inicio) y `resumenes/_estado`
 - `calendarios/{AAAA-MM}`: filas del calendario mensual con la fecha para cada terminación de CUIT (0–9)
 
 Firestore no busca texto parcial, así que el servidor guarda la lista de clientes en memoria y filtra/ordena ahí.
@@ -144,9 +145,12 @@ En la ficha de cada cliente: subir contratos, presupuestos, facturas, constancia
 ## Inicio (dashboard) y exportaciones
 - **Inicio** muestra, para el mes elegido: lo cobrado (cifra principal) y lo facturado, la deuda total, clientes activos y nuevos,
   pendientes urgentes, un gráfico de **cobrado por mes** (últimos 6 meses, con tooltip y vista de tabla) y los 5 mayores deudores.
-  Las sumas usan consultas de agregación de Firestore, así que cuestan pocas lecturas.
+  Los totales de facturado y cobrado salen de `resumenes/{AAAA-MM}`, documentos que se actualizan solos con cada honorario y cada cobro: el Inicio lee 6 documentos
+  pequeños y **no necesita índices de Firestore**. La primera vez se arman solos con lo que ya hay; si alguna vez no coinciden, un administrador puede usar *Recalcular totales* (al pie del Inicio).
+  Si un bloque del Inicio falla, los demás se muestran igual y se indica cuál faltó.
 - **Exportar:** *Clientes* → Excel o CSV (respeta los filtros de la lista; el Excel se puede volver a importar); *Honorarios* → Excel o PDF del mes;
   *Deudores* → Excel o PDF. El CSV usa `;` y acentos correctos para Excel en español, y neutraliza celdas que empiecen con `=`, `+`, `-` o `@`.
+- Los totales mensuales están en `resumenes/{AAAA-MM}` (facturado y cobrado; el cobrado cuenta en el mes de la fecha del cobro).
 - Los cobros viven en la colección `pagos` (con `honorarioId`, `clienteId` y `fecha`) para poder sumarlos por fecha en todo el estudio.
 
 ## Honorarios y cobros

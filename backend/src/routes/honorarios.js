@@ -8,6 +8,7 @@ const { requiereAdmin } = require('../middleware/auth');
 const { honorarioSchema, honorarioCambiosSchema, pagoSchema } = require('../validacion');
 const { hoy, mapaClientes } = require('../util');
 const { honorarios, consultar, deudores, conEstado, redondear } = require('../servicios/honorarios');
+const { sumarFacturado, sumarCobrado, borrarHonorarios } = require('../servicios/resumenes');
 
 // Los cobros son una colección propia (no una subcolección) para poder sumarlos por fecha
 // en todo el estudio sin leerlos uno por uno (dashboard).
@@ -29,7 +30,11 @@ router.post('/', async (req, res) => {
     return res.status(400).json({ error: 'Datos inválidos', detalles: { clienteId: ['El cliente no existe'] } });
   }
   const nuevo = { ...r.data, pagado: 0, saldo: r.data.monto, origen: 'manual', creadoPor: req.usuario.id, creadoEn: new Date() };
-  const ref = await honorarios().add(nuevo);
+  const ref = honorarios().doc();
+  const lote = db.batch();
+  lote.create(ref, nuevo);
+  sumarFacturado(lote, nuevo.periodo, nuevo.monto);
+  await lote.commit();
   res.status(201).json(salida({ id: ref.id, ...nuevo }, await mapaClientes()));
 });
 
@@ -44,6 +49,7 @@ router.post('/generar', async (req, res) => {
   const nuevos = conAbono.filter((_, i) => !existentes[i].exists);
   for (let i = 0; i < nuevos.length; i += 400) {
     const lote = db.batch();
+    sumarFacturado(lote, periodo, redondear(nuevos.slice(i, i + 400).reduce((t, c) => t + redondear(c.abonoMensual), 0)));
     for (const c of nuevos.slice(i, i + 400)) {
       lote.create(honorarios().doc(`${c.id}_abono_${periodo}`), {
         clienteId: c.id, periodo, concepto: 'Honorarios mensuales', monto: redondear(c.abonoMensual), pagado: 0, saldo: redondear(c.abonoMensual),
@@ -67,6 +73,7 @@ router.patch('/:id', async (req, res) => {
     if (monto < h.pagado) return { status: 400, error: `El monto no puede ser menor a lo ya cobrado (${h.pagado})` };
     const cambios = { ...r.data, monto, saldo: redondear(monto - h.pagado) };
     tx.update(ref, cambios);
+    sumarFacturado(tx, h.periodo, monto - h.monto);
     return { ok: { id: doc.id, ...h, ...cambios } };
   });
   if (!resultado.ok) return res.status(resultado.status).json({ error: resultado.error });
@@ -74,11 +81,9 @@ router.patch('/:id', async (req, res) => {
 });
 
 router.delete('/:id', requiereAdmin, async (req, res) => {
-  const ref = honorarios().doc(req.params.id);
-  if (!(await ref.get()).exists) return res.status(404).json({ error: 'Honorario no encontrado' });
-  const cobros = await pagos().where('honorarioId', '==', req.params.id).get();
-  await Promise.all(cobros.docs.map((d) => d.ref.delete()));
-  await ref.delete();
+  const doc = await honorarios().doc(req.params.id).get();
+  if (!doc.exists) return res.status(404).json({ error: 'Honorario no encontrado' });
+  await borrarHonorarios([doc]); // también descuenta sus montos de los totales del Inicio
   res.status(204).end();
 });
 
@@ -104,6 +109,7 @@ router.post('/:id/pagos', async (req, res) => {
     const cambios = { pagado, saldo: redondear(h.monto - pagado) };
     tx.set(pagoRef, pago);
     tx.update(ref, cambios);
+    sumarCobrado(tx, pago.fecha, pago.monto);
     return { ok: { id: doc.id, ...h, ...cambios } };
   });
   if (!resultado.ok) return res.status(resultado.status).json({ error: resultado.error });
@@ -121,6 +127,7 @@ router.delete('/:id/pagos/:pid', requiereAdmin, async (req, res) => {
     const pagado = Math.max(0, redondear(h.pagado - pagoDoc.data().monto));
     tx.delete(pagoRef);
     tx.update(ref, { pagado, saldo: redondear(h.monto - pagado) });
+    sumarCobrado(tx, pagoDoc.data().fecha, -pagoDoc.data().monto);
     return { ok: true };
   });
   if (!resultado.ok) return res.status(resultado.status).json({ error: resultado.error });

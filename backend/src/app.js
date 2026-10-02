@@ -45,6 +45,11 @@ app.use((err, _req, res, _next) => {
   if (err.type === 'entity.parse.failed') return res.status(400).json({ error: 'Los datos enviados no son válidos' });
   // Errores de configuración con mensaje seguro (ej. Storage sin configurar)
   if (err.configuracion) return res.status(503).json({ error: err.message });
+  // Firestore real puede pedir un índice que el emulador no exige: se avisa con claridad (el enlace para crearlo está en los logs).
+  if (err.code === 9 && /index/i.test(String(err.message))) {
+    console.error('[firestore] Falta un índice:', err.message);
+    return res.status(500).json({ error: 'Firestore necesita un índice para esta consulta. Revisa los logs del servidor: incluyen un enlace para crearlo con un clic.' });
+  }
   console.error(err);
   res.status(500).json({ error: 'Error interno del servidor' });
 });

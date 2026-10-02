@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
+import { useAuth } from '../auth';
 import { mesActual, pesos } from '../formato';
 import { nombrePeriodo } from '../fechas';
 import GraficoMeses from '../componentes/GraficoMeses';
@@ -17,14 +18,24 @@ function Tile({ titulo, valor, detalle, color = 'text-slate-800', a }) {
 }
 
 export default function Inicio() {
+  const { usuario } = useAuth();
+  const [recalculando, setRecalculando] = useState(false);
   const [periodo, setPeriodo] = useState(mesActual());
   const [d, setD] = useState(null);
   const [error, setError] = useState('');
 
-  useEffect(() => {
+  const cargar = () => {
     setError('');
-    api(`/dashboard?periodo=${periodo}`).then(setD).catch((e) => setError(e.message));
-  }, [periodo]);
+    return api(`/dashboard?periodo=${periodo}`).then(setD).catch((e) => setError(e.message));
+  };
+  useEffect(() => { cargar(); }, [periodo]);
+
+  async function recalcular() {
+    if (!confirm('Se volverán a calcular los totales mensuales a partir de todos los honorarios y cobros. ¿Continuar?')) return;
+    setRecalculando(true);
+    try { await api('/dashboard/recalcular', { metodo: 'POST' }); await cargar(); } catch (ex) { setError(ex.message); } finally { setRecalculando(false); }
+  }
+  const valor = (n) => (n === null || n === undefined ? '—' : pesos(n));
 
   return (
     <div className="space-y-6">
@@ -38,23 +49,30 @@ export default function Inicio() {
       {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
       {!d ? !error && <p className="text-slate-500">Cargando…</p> : (
         <>
+          {d.avisos?.length > 0 && (
+            <div role="alert" className="rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+              <p className="font-medium">Parte del Inicio no se pudo cargar:</p>
+              <ul className="ml-5 list-disc">{d.avisos.map((a, i) => <li key={i}>{a}</li>)}</ul>
+              <button className="mt-1 text-blue-700 hover:underline" onClick={cargar}>Reintentar</button>
+            </div>
+          )}
           {/* Una sola cifra protagonista: lo cobrado en el período */}
           <section className="rounded-lg border bg-white p-5 sm:p-6">
             <p className="text-sm text-slate-500">Cobrado en {nombrePeriodo(d.periodo)}</p>
-            <p className="mt-1 break-words text-3xl font-semibold text-slate-900 sm:text-5xl">{pesos(d.honorarios.cobrado)}</p>
-            <p className="mt-2 text-sm text-slate-600">de {pesos(d.honorarios.facturado)} facturados en el mes</p>
+            <p className="mt-1 break-words text-3xl font-semibold text-slate-900 sm:text-5xl">{valor(d.honorarios.cobrado)}</p>
+            <p className="mt-2 text-sm text-slate-600">de {valor(d.honorarios.facturado)} facturados en el mes</p>
           </section>
 
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <Tile titulo="Deuda total de clientes" valor={pesos(d.honorarios.deudaTotal)} color={d.honorarios.deudaTotal > 0 ? 'text-red-600' : 'text-slate-400'} detalle={`${d.honorarios.deudoresCantidad} clientes`} a="/honorarios" />
-            <Tile titulo="Clientes activos" valor={d.clientes.activos} detalle={`${d.clientes.total} en total · ${d.clientes.potenciales} potenciales`} a="/clientes" />
-            <Tile titulo={`Nuevos en ${nombrePeriodo(d.periodo)}`} valor={d.clientes.nuevosMes} a="/clientes" />
-            <Tile titulo="Pendientes urgentes" valor={d.agenda.urgentes} color={d.agenda.urgentes > 0 ? 'text-red-600' : 'text-slate-400'} detalle="vencidos o para hoy" a="/agenda" />
+            <Tile titulo="Deuda total de clientes" valor={valor(d.honorarios.deudaTotal)} color={d.honorarios.deudaTotal > 0 ? 'text-red-600' : 'text-slate-400'} detalle={d.honorarios.deudoresCantidad === null ? undefined : `${d.honorarios.deudoresCantidad} clientes`} a="/honorarios" />
+            <Tile titulo="Clientes activos" valor={d.clientes?.activos ?? '—'} detalle={d.clientes && `${d.clientes.total} en total · ${d.clientes.potenciales} potenciales`} a="/clientes" />
+            <Tile titulo={`Nuevos en ${nombrePeriodo(d.periodo)}`} valor={d.clientes?.nuevosMes ?? '—'} a="/clientes" />
+            <Tile titulo="Pendientes urgentes" valor={d.agenda?.urgentes ?? '—'} color={d.agenda?.urgentes > 0 ? 'text-red-600' : 'text-slate-400'} detalle="vencidos o para hoy" a="/agenda" />
           </div>
 
-          <GraficoMeses serie={d.serie} seleccionado={d.periodo} />
+          {d.serie && <GraficoMeses serie={d.serie} seleccionado={d.periodo} />}
 
-          <section className="rounded-lg border bg-white p-4 sm:p-6">
+          {d.honorarios.deudaTotal !== null && <section className="rounded-lg border bg-white p-4 sm:p-6">
             <div className="mb-3 flex items-baseline justify-between">
               <h2 className="font-semibold">Mayores deudores</h2>
               <Link to="/honorarios" className="text-sm text-blue-700 hover:underline">Ver todos</Link>
@@ -69,7 +87,12 @@ export default function Inicio() {
               ))}
               {d.honorarios.topDeudores.length === 0 && <li className="py-4 text-center text-sm text-slate-500">Nadie debe nada. 🎉</li>}
             </ul>
-          </section>
+          </section>}
+          {usuario.rol === 'ADMIN' && (
+            <p className="text-xs text-slate-500">
+              ¿Los totales no coinciden? <button className="text-blue-700 hover:underline disabled:opacity-50" onClick={recalcular} disabled={recalculando}>{recalculando ? 'Recalculando…' : 'Recalcular totales'}</button>
+            </p>
+          )}
         </>
       )}
     </div>

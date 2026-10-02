@@ -451,7 +451,7 @@ describe('honorarios y cobros', () => {
   let h; // honorario del cliente A en el período actual
 
   beforeAll(async () => {
-    for (const col of ['clientes', 'cuits', 'honorarios', 'pagos']) await db.recursiveDelete(db.collection(col));
+    for (const col of ['clientes', 'cuits', 'honorarios', 'pagos', 'resumenes']) await db.recursiveDelete(db.collection(col));
     await invalidar();
     const nuevo = (nombre, cuit, extra) => admin.post('/api/clientes').send({ razonSocial: nombre, cuit: cuitDe(cuit), condicionIva: 'RI', estado: 'ACTIVO', ...extra }).expect(201);
     c.a = (await nuevo('Hon A', '2011111111', { abonoMensual: 100000 })).body.id;
@@ -549,7 +549,7 @@ describe('dashboard y exportaciones', () => {
   };
 
   beforeAll(async () => {
-    for (const col of ['clientes', 'cuits', 'honorarios', 'pagos']) await db.recursiveDelete(db.collection(col));
+    for (const col of ['clientes', 'cuits', 'honorarios', 'pagos', 'resumenes']) await db.recursiveDelete(db.collection(col));
     await invalidar();
     const nuevo = (nombre, cuit, extra) => admin.post('/api/clientes').send({ razonSocial: nombre, cuit: cuitDe(cuit), condicionIva: 'RI', estado: 'ACTIVO', ...extra }).expect(201);
     c.a = (await nuevo('Dash Álvarez', '2044444444', { abonoMensual: 100000, ciudad: 'Santa Rosa', etiquetas: ['mensual'] })).body.id;
@@ -763,7 +763,7 @@ describe('avisos por email', () => {
   beforeAll(async () => {
     luis = await login('luis@t.com', 'clave12345');
     correo.usarTransporteDePrueba({ sendMail: async (m) => { if (fallar.has(m.to)) throw new Error('SMTP caído'); enviados.push(m); } });
-    for (const col of ['clientes', 'cuits', 'honorarios', 'pagos', 'tareas', 'vencimientos', 'envios', 'avisosCliente', 'config']) await db.recursiveDelete(db.collection(col));
+    for (const col of ['clientes', 'cuits', 'honorarios', 'pagos', 'resumenes', 'tareas', 'vencimientos', 'envios', 'avisosCliente', 'config']) await db.recursiveDelete(db.collection(col));
     await invalidar();
     const nuevo = async (nombre, cuit, extra = {}) => (await admin.post('/api/clientes').send({ razonSocial: nombre, cuit: cuitDe(cuit), condicionIva: 'RI', estado: 'ACTIVO', ...extra }).expect(201)).body.id;
     c.deuda = await nuevo('Cli <b>Deuda</b>', '2066666666', { email: 'deuda@c.com' });
@@ -985,6 +985,105 @@ describe('transporte SMTP real', () => {
     } finally {
       await new Promise((r) => servidor.close(r));
       for (const k of ['SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASS', 'ESTUDIO_NOMBRE', 'MAIL_REPLY_TO']) { if (guardado[k] === undefined) delete process.env[k]; else process.env[k] = guardado[k]; }
+    }
+  });
+});
+
+// ---------- Totales mensuales del Inicio (sin índices ni consultas de suma) ----------
+describe('totales mensuales del Inicio', () => {
+  const { db: base } = require('../src/db');
+  const periodo = hoy().slice(0, 7);
+  const c = {};
+  const inicio = async () => (await user.get('/api/dashboard').expect(200)).body;
+  const totales = async () => { const d = (await inicio()).honorarios; return [d.facturado, d.cobrado]; };
+
+  beforeAll(async () => {
+    for (const col of ['clientes', 'cuits', 'honorarios', 'pagos', 'resumenes']) await base.recursiveDelete(base.collection(col));
+    await invalidar();
+    const nuevo = async (nombre, cuit, abono) => (await admin.post('/api/clientes').send({ razonSocial: nombre, cuit: cuitDe(cuit), condicionIva: 'RI', estado: 'ACTIVO', abonoMensual: abono }).expect(201)).body.id;
+    c.a = await nuevo('Tot A', '2016161616', 100000);
+    c.b = await nuevo('Tot B', '2017171717', 50000.5);
+    await admin.post('/api/honorarios/generar').send({ periodo }).expect(201);
+  });
+
+  it('arma los totales solo la primera vez, con lo que ya existía', async () => {
+    expect((await base.collection('resumenes').doc('_estado').get()).exists).toBe(false);
+    expect(await totales()).toEqual([150000.5, 0]);
+    expect((await base.collection('resumenes').doc('_estado').get()).exists).toBe(true);
+  });
+
+  it('se mantienen al día con cada cobro, cambio y borrado', async () => {
+    const lista = (await admin.get(`/api/honorarios?periodo=${periodo}`)).body.datos;
+    const ha = lista.find((h) => h.clienteId === c.a).id;
+    const hb = lista.find((h) => h.clienteId === c.b).id;
+    const cobrar = (id, monto, fecha) => admin.post(`/api/honorarios/${id}/pagos`).send({ monto, fecha }).expect(201);
+
+    const p1 = (await cobrar(ha, 40000)).body.pago.id;
+    await cobrar(hb, 20000.25);
+    expect(await totales()).toEqual([150000.5, 60000.25]);
+
+    await admin.patch(`/api/honorarios/${ha}`).send({ monto: 120000 }).expect(200); // sube lo facturado
+    expect(await totales()).toEqual([170000.5, 60000.25]);
+
+    await admin.delete(`/api/honorarios/${ha}/pagos/${p1}`).expect(204); // anular un cobro lo descuenta
+    expect(await totales()).toEqual([170000.5, 20000.25]);
+
+    // Un cobro con fecha de otro mes cuenta en ESE mes, no en el del honorario
+    const previo = `${new Date(Date.UTC(Number(periodo.slice(0, 4)), Number(periodo.slice(5)) - 2, 1)).toISOString().slice(0, 7)}`;
+    await cobrar(ha, 10000, `${previo}-15`);
+    const d = await inicio();
+    expect(d.serie.find((s) => s.periodo === previo).cobrado).toBe(10000);
+    expect(d.honorarios.cobrado).toBe(20000.25);
+
+    const nuevo = (await admin.post('/api/honorarios').send({ clienteId: c.a, periodo, concepto: 'Balance', monto: 30000 }).expect(201)).body;
+    expect((await totales())[0]).toBe(200000.5);
+    await admin.delete(`/api/honorarios/${nuevo.id}`).expect(204);
+    expect((await totales())[0]).toBe(170000.5);
+
+    await admin.delete(`/api/honorarios/${ha}`).expect(204); // borra el honorario con su cobro del mes anterior
+    const final = await inicio();
+    expect(final.honorarios).toMatchObject({ facturado: 50000.5, cobrado: 20000.25 });
+    expect(final.serie.find((s) => s.periodo === previo).cobrado).toBe(0);
+  });
+
+  it('al borrar un cliente definitivamente se descuentan sus honorarios y cobros', async () => {
+    await admin.delete(`/api/clientes/${c.b}?definitivo=true`).expect(204);
+    expect((await inicio()).honorarios).toMatchObject({ facturado: 0, cobrado: 0 });
+  });
+
+  it('se pueden reparar con "recalcular" (solo administradores)', async () => {
+    await admin.post('/api/honorarios').send({ clienteId: c.a, periodo, concepto: 'Extra', monto: 777 }).expect(201);
+    await base.collection('resumenes').doc(periodo).set({ facturado: 1, cobrado: 999999 }); // simula un desfasaje
+    expect((await inicio()).honorarios).toMatchObject({ facturado: 1, cobrado: 999999 });
+    await user.post('/api/dashboard/recalcular').expect(403);
+    expect((await admin.post('/api/dashboard/recalcular').expect(200)).body).toMatchObject({ honorarios: 1 });
+    expect((await inicio()).honorarios).toMatchObject({ facturado: 777, cobrado: 0 });
+  });
+
+  it('si falla un bloque, el Inicio muestra los demás y avisa cuál faltó', async () => {
+    const original = base.collection.bind(base);
+    base.collection = (n) => { if (n === 'honorarios') throw new Error('falla simulada'); return original(n); };
+    try {
+      const d = (await user.get('/api/dashboard').expect(200)).body;
+      expect(d.avisos).toEqual(['No se pudo cargar: deudores.']);
+      expect(d.honorarios).toMatchObject({ deudaTotal: null, topDeudores: [] });
+      expect(d.honorarios.facturado).toBe(777); // los totales mensuales no dependen de esa consulta
+      expect(d.clientes.activos).toBe(1);
+      expect(d.serie).toHaveLength(6);
+    } finally {
+      base.collection = original;
+    }
+  });
+
+  it('una consulta que pide índice responde con un mensaje claro y sin filtrar detalles', async () => {
+    const original = base.collection.bind(base);
+    base.collection = (n) => { if (n === 'tareas') throw Object.assign(new Error('9 FAILED_PRECONDITION: The query requires an index. You can create it here: https://console.firebase.google.com/x'), { code: 9 }); return original(n); };
+    try {
+      const r = (await user.get('/api/tareas').expect(500)).body;
+      expect(r.error).toMatch(/necesita un índice/);
+      expect(r.error).not.toContain('console.firebase.google.com');
+    } finally {
+      base.collection = original;
     }
   });
 });
