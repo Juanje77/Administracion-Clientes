@@ -99,7 +99,7 @@ export default function ClienteDetalle() {
         {c.notas && <p className="mt-4 whitespace-pre-wrap rounded bg-slate-50 p-3 text-sm">{c.notas}</p>}
       </section>
 
-      <HonorariosCliente clienteId={id} abonoMensual={c.abonoMensual} />
+      {usuario.verDinero && <HonorariosCliente clienteId={id} abonoMensual={c.abonoMensual} />}
       <DocumentosCliente clienteId={id} />
       <TareasCliente clienteId={id} clienteNombre={c.razonSocial} />
       <VencimientosCliente clienteId={id} />

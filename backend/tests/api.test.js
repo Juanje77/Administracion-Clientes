@@ -18,7 +18,7 @@ beforeAll(async () => {
   await invalidar();
   const passwordHash = await bcrypt.hash('clave12345', 4);
   await db.collection('usuarios').add({ nombre: 'Admin', email: 'admin@t.com', passwordHash, rol: 'ADMIN', activo: true });
-  await db.collection('usuarios').add({ nombre: 'Ana', email: 'ana@t.com', passwordHash, rol: 'USUARIO', activo: true });
+  await db.collection('usuarios').add({ nombre: 'Ana', email: 'ana@t.com', passwordHash, rol: 'USUARIO', activo: true, verDinero: true }); // con acceso a los montos (los tests de honorarios la usan)
   admin = await login('admin@t.com');
   user = await login('ana@t.com');
 });
@@ -823,7 +823,7 @@ describe('avisos por email', () => {
     expect(ana.text).toContain('Tarea vencida de Ana');
     expect(ana.text).toContain('Tarea de hoy de Ana');
     expect(ana.subject).toMatch(/urgentes/);
-    expect(ana.html).not.toContain('Clientes con deuda'); // la deuda es solo para administradores
+    expect(ana.html).toContain('Clientes con deuda'); // Ana tiene acceso a los montos, así que su resumen incluye la deuda
     const adm = para('admin@t.com')[0];
     expect(adm.html).toContain('Clientes con deuda');
     expect(adm.html).toContain('&lt;b&gt;Deuda&lt;/b&gt;'); // el nombre del cliente va escapado
@@ -1230,5 +1230,154 @@ describe('tareas internas, reasignación y aviso por email', () => {
     const mias = await listaDe(admin, 'yo');
     expect(mias).not.toContain('Ligada al cliente');
     expect(mias).toContain('Renovar el seguro');
+  });
+});
+
+// ---------- Acceso a dinero: oculto para quien no lo tiene, bloqueado en el servidor ----------
+describe('acceso a dinero por usuario', () => {
+  const { readSheet } = require('read-excel-file/node');
+  const A = require('../src/servicios/avisos');
+  const periodo = hoy().slice(0, 7);
+  const u = {};
+  let sin; // usuario común, SIN acceso a montos
+  const binario = (res, cb) => { const d = []; res.on('data', (x) => d.push(x)); res.on('end', () => cb(null, Buffer.concat(d))); };
+  const bajar = (agente, url) => agente.get(url).buffer(true).parse(binario);
+  const darAcceso = (valor) => admin.patch(`/api/usuarios/${u.sin}`).send({ verDinero: valor }).expect(200);
+
+  beforeAll(async () => {
+    for (const col of ['clientes', 'cuits', 'honorarios', 'pagos', 'resumenes', 'tareas', 'vencimientos']) await db.recursiveDelete(db.collection(col));
+    await invalidar();
+    const creado = (await admin.post('/api/usuarios').send({ nombre: 'Contable', email: 'contable@t.com', password: 'clave12345' }).expect(201)).body;
+    u.sin = creado.id;
+    u.creado = creado;
+    sin = await login('contable@t.com', 'clave12345');
+    u.cli = (await admin.post('/api/clientes').send({ razonSocial: 'Cliente con Abono', cuit: cuitDe('2018181818'), condicionIva: 'RI', estado: 'ACTIVO', abonoMensual: 90000, ciudad: 'Toay' }).expect(201)).body.id;
+    await admin.post('/api/honorarios/generar').send({ periodo }).expect(201);
+    u.hon = (await admin.get(`/api/honorarios?periodo=${periodo}`)).body.datos[0];
+    await admin.post(`/api/honorarios/${u.hon.id}/pagos`).send({ monto: 30000 }).expect(201);
+    await admin.post('/api/honorarios').send({ clienteId: u.cli, periodo: '2020-01', concepto: 'Viejo', monto: 5000 }).expect(201);
+  });
+
+  it('un usuario nuevo NO tiene acceso a dinero por defecto, y el administrador siempre', async () => {
+    expect(u.creado).toMatchObject({ rol: 'USUARIO', verDinero: false });
+    expect((await sin.get('/api/auth/me').expect(200)).body).toMatchObject({ verDinero: false });
+    expect((await admin.get('/api/auth/me').expect(200)).body).toMatchObject({ rol: 'ADMIN', verDinero: true });
+    const lista = (await admin.get('/api/usuarios').expect(200)).body;
+    expect(lista.find((x) => x.email === 'admin@t.com').verDinero).toBe(true);
+    expect(lista.find((x) => x.email === 'contable@t.com').verDinero).toBe(false);
+  });
+
+  it('el servidor bloquea todo lo de honorarios, cobros y deudores', async () => {
+    const h = u.hon.id;
+    for (const [metodo, url, cuerpo] of [
+      ['get', '/api/honorarios'], ['get', `/api/honorarios?periodo=${periodo}`], ['get', `/api/honorarios?clienteId=${u.cli}`], ['get', '/api/honorarios/deudores'],
+      ['post', '/api/honorarios', { clienteId: u.cli, periodo, concepto: 'X', monto: 10 }], ['post', '/api/honorarios/generar', { periodo }],
+      ['patch', `/api/honorarios/${h}`, { monto: 1 }], ['delete', `/api/honorarios/${h}`],
+      ['get', `/api/honorarios/${h}/pagos`], ['post', `/api/honorarios/${h}/pagos`, { monto: 1 }], ['delete', `/api/honorarios/${h}/pagos/x`],
+    ]) {
+      const r = await sin[metodo](url).send(cuerpo);
+      expect([metodo, url, r.status]).toEqual([metodo, url, 403]);
+      expect(r.body.error).toMatch(/dinero/);
+    }
+    expect((await admin.get('/api/honorarios/deudores').expect(200)).body.total).toBeGreaterThan(0);
+  });
+
+  it('el Inicio no incluye ni calcula montos para quien no tiene acceso', async () => {
+    const d = (await sin.get('/api/dashboard').expect(200)).body;
+    expect(d.dinero).toBe(false);
+    expect(d.honorarios).toBeNull();
+    expect(d.serie).toBeNull();
+    expect(JSON.stringify(d)).not.toMatch(/90000|30000|facturado|cobrado|deuda/i);
+    expect(d.clientes.total).toBe(1); // lo que no es dinero sigue disponible
+    const a = (await admin.get('/api/dashboard').expect(200)).body;
+    expect(a.dinero).toBe(true);
+    expect(a.honorarios).toMatchObject({ facturado: 90000, cobrado: 30000, deudaTotal: 65000 }); // el mes + los $5.000 de 2020
+    expect(a.serie).toHaveLength(6);
+  });
+
+  it('el abono mensual del cliente no se ve ni se puede cambiar sin acceso', async () => {
+    const lista = (await sin.get('/api/clientes').expect(200)).body.datos;
+    expect(lista[0]).not.toHaveProperty('abonoMensual');
+    expect((await sin.get(`/api/clientes/${u.cli}`).expect(200)).body).not.toHaveProperty('abonoMensual');
+    // intenta editarlo: la respuesta no lo muestra y el valor guardado no cambia
+    const put = (await sin.put(`/api/clientes/${u.cli}`).send({ razonSocial: 'Cliente con Abono', cuit: cuitDe('2018181818'), condicionIva: 'RI', estado: 'ACTIVO', ciudad: 'Santa Rosa', abonoMensual: 1 }).expect(200)).body;
+    expect(put).not.toHaveProperty('abonoMensual');
+    expect(put.ciudad).toBe('Santa Rosa'); // lo demás sí se edita
+    expect((await admin.get(`/api/clientes/${u.cli}`)).body.abonoMensual).toBe(90000);
+    // al crear un cliente tampoco puede fijarle un abono
+    const nuevo = (await sin.post('/api/clientes').send({ razonSocial: 'Cliente de Contable', abonoMensual: 777 }).expect(201)).body;
+    expect(nuevo).not.toHaveProperty('abonoMensual');
+    expect((await admin.get(`/api/clientes/${nuevo.id}`)).body.abonoMensual ?? null).toBeNull();
+    // el archivado también devuelve el cliente sin el abono
+    expect((await sin.delete(`/api/clientes/${nuevo.id}`).expect(200)).body).not.toHaveProperty('abonoMensual');
+    // el administrador sí lo ve
+    expect((await admin.get(`/api/clientes/${u.cli}`)).body.abonoMensual).toBe(90000);
+    expect((await admin.get('/api/clientes')).body.datos.find((c) => c.id === u.cli).abonoMensual).toBe(90000);
+  });
+
+  it('las exportaciones de dinero están bloqueadas y la de clientes no trae el abono', async () => {
+    for (const url of [`/api/exportar/honorarios.xlsx?periodo=${periodo}`, `/api/exportar/honorarios.pdf?periodo=${periodo}`, '/api/exportar/deudores.xlsx', '/api/exportar/deudores.pdf']) {
+      await sin.get(url).expect(403);
+    }
+    const x = await readSheet((await bajar(sin, '/api/exportar/clientes.xlsx').expect(200)).body);
+    expect(x[0]).not.toContain('Abono mensual');
+    expect(JSON.stringify(x)).not.toContain('90000');
+    expect(x[0]).toContain('Ciudad'); // el resto de las columnas sigue
+    const csv = (await bajar(sin, '/api/exportar/clientes.csv').expect(200)).body.toString('utf8');
+    expect(csv).not.toMatch(/Abono mensual|90000/);
+    const adm = await readSheet((await bajar(admin, '/api/exportar/clientes.xlsx').expect(200)).body);
+    expect(adm[0]).toContain('Abono mensual');
+    expect(adm.some((f) => f.includes(90000))).toBe(true);
+  });
+
+  it('el resumen diario por email solo incluye la deuda a quien tiene acceso', async () => {
+    await admin.post('/api/tareas').send({ titulo: 'Para que haya resumen', vence: hoy(), asignadoA: u.sin }).expect(201);
+    const mensaje = async () => (await A.planificar({})).mensajes.find((m) => m.to === 'contable@t.com');
+    expect((await mensaje()).html).not.toContain('Clientes con deuda');
+    expect((await mensaje()).text).not.toContain('DEUDA TOTAL');
+    await darAcceso(true);
+    expect((await mensaje()).html).toContain('Clientes con deuda');
+    await darAcceso(false);
+    expect((await mensaje()).html).not.toContain('Clientes con deuda');
+  });
+
+  it('dar o quitar el acceso surte efecto enseguida, sin volver a iniciar sesión', async () => {
+    await sin.get('/api/honorarios/deudores').expect(403);
+    expect((await darAcceso(true)).body).toMatchObject({ verDinero: true });
+    await sin.get('/api/honorarios/deudores').expect(200);
+    expect((await sin.get('/api/dashboard').expect(200)).body.honorarios.deudaTotal).toBeGreaterThan(0);
+    expect((await sin.get(`/api/clientes/${u.cli}`)).body.abonoMensual).toBe(90000);
+    await bajar(sin, '/api/exportar/deudores.xlsx').expect(200);
+    // sigue siendo un usuario común: no puede cobrar de más ni anular cobros (eso es solo de administradores)
+    const cobros = (await sin.get(`/api/honorarios/${u.hon.id}/pagos`).expect(200)).body;
+    await sin.delete(`/api/honorarios/${u.hon.id}/pagos/${cobros[0].id}`).expect(403);
+    await sin.delete(`/api/honorarios/${u.hon.id}`).expect(403);
+    await darAcceso(false);
+    await sin.get('/api/honorarios/deudores').expect(403);
+    expect((await sin.get(`/api/clientes/${u.cli}`)).body).not.toHaveProperty('abonoMensual');
+  });
+
+  it('solo un administrador cambia accesos, con datos válidos y no a sí mismo', async () => {
+    await sin.patch(`/api/usuarios/${u.sin}`).send({ verDinero: true }).expect(403); // no puede darse acceso
+    await user.patch(`/api/usuarios/${u.sin}`).send({ verDinero: true }).expect(403);
+    await admin.patch(`/api/usuarios/${u.sin}`).send({}).expect(400);
+    await admin.patch(`/api/usuarios/${u.sin}`).send({ verDinero: 'si' }).expect(400);
+    await admin.patch(`/api/usuarios/${u.admin ?? (await admin.get('/api/auth/me')).body.id}`).send({ verDinero: false }).expect(400); // a sí mismo
+    await admin.patch('/api/usuarios/no-existe').send({ verDinero: true }).expect(404);
+    const otro = (await admin.post('/api/usuarios').send({ nombre: 'Socio', email: 'socio@t.com', password: 'clave12345', verDinero: true }).expect(201)).body;
+    expect(otro.verDinero).toBe(true); // se puede dar acceso al crearlo
+    const socio = await login('socio@t.com', 'clave12345');
+    await socio.get('/api/honorarios/deudores').expect(200);
+    await socio.post('/api/usuarios').send({ nombre: 'Z', email: 'z@t.com', password: 'clave12345' }).expect(403); // pero no es administrador
+  });
+
+  it('desactivar a un usuario cierra su sesión en el acto', async () => {
+    await sin.get('/api/clientes').expect(200);
+    await admin.patch(`/api/usuarios/${u.sin}`).send({ activo: false }).expect(200);
+    await sin.get('/api/clientes').expect(401);
+    await sin.get('/api/auth/me').expect(401);
+    await request(app).post('/api/auth/login').send({ email: 'contable@t.com', password: 'clave12345' }).expect(401);
+    await admin.patch(`/api/usuarios/${u.sin}`).send({ activo: true }).expect(200);
+    await sin.get('/api/clientes').expect(200); // reactivado: su sesión vuelve a valer
   });
 });

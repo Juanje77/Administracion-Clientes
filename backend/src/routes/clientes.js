@@ -17,7 +17,12 @@ const claveCuit = (cuit) => (cuit ? String(cuit).replace(/\D/g, '') : null);
 const normalizarEtiquetas = (lista = []) => [...new Set(lista.map((n) => n.toLowerCase()))].sort();
 
 // Respuesta de la API: las etiquetas se muestran como objetos { nombre }.
-const salida = (c) => ({ ...c, obligaciones: c.obligaciones || [], etiquetas: (c.etiquetas || []).map((nombre) => ({ nombre })) });
+// El abono mensual es dinero: solo lo ven quienes tienen ese acceso.
+const salida = (c, verDinero) => {
+  const out = { ...c, obligaciones: c.obligaciones || [], etiquetas: (c.etiquetas || []).map((nombre) => ({ nombre })) };
+  if (!verDinero) delete out.abonoMensual;
+  return out;
+};
 
 // El CUIT es único: se reserva un documento cuits/{11 dígitos} dentro de una transacción.
 class CuitDuplicado extends Error {}
@@ -31,7 +36,7 @@ router.get('/', async (req, res) => {
     total: lista.length,
     pagina,
     porPagina,
-    datos: lista.slice((pagina - 1) * porPagina, pagina * porPagina).map(salida),
+    datos: lista.slice((pagina - 1) * porPagina, pagina * porPagina).map((c) => salida(c, req.usuario.verDinero)),
   });
 });
 
@@ -49,6 +54,7 @@ router.post('/', async (req, res) => {
   const r = clienteSchema.safeParse(req.body);
   if (!r.success) return errorValidacion(res, r.error);
   const { etiquetas, ...datos } = r.data;
+  if (!req.usuario.verDinero) delete datos.abonoMensual; // no puede fijar el abono
   const ahora = new Date();
   const ref = clientes().doc();
   const nuevo = { ...datos, obligaciones: datos.obligaciones ?? [], etiquetas: normalizarEtiquetas(etiquetas), creadoEn: ahora, actualizadoEn: ahora };
@@ -66,13 +72,13 @@ router.post('/', async (req, res) => {
     throw e;
   }
   await invalidar();
-  res.status(201).json(salida({ id: ref.id, ...nuevo }));
+  res.status(201).json(salida({ id: ref.id, ...nuevo }, req.usuario.verDinero));
 });
 
 router.get('/:id', async (req, res) => {
   const doc = await clientes().doc(req.params.id).get();
   if (!doc.exists) return res.status(404).json({ error: 'Cliente no encontrado' });
-  res.json(salida(aObjeto(doc)));
+  res.json(salida(aObjeto(doc), req.usuario.verDinero));
 });
 
 router.put('/:id', async (req, res) => {
@@ -80,6 +86,7 @@ router.put('/:id', async (req, res) => {
   if (!r.success) return errorValidacion(res, r.error);
   const ref = clientes().doc(req.params.id);
   const { etiquetas, ...datos } = r.data;
+  if (!req.usuario.verDinero) delete datos.abonoMensual; // conserva el abono que ya tenía
   const claveNueva = claveCuit(datos.cuit);
   try {
     const resultado = await db.runTransaction(async (tx) => {
@@ -99,7 +106,7 @@ router.put('/:id', async (req, res) => {
     });
     if (!resultado) return res.status(404).json({ error: 'Cliente no encontrado' });
     await invalidar();
-    res.json(salida({ id: ref.id, ...resultado }));
+    res.json(salida({ id: ref.id, ...resultado }, req.usuario.verDinero));
   } catch (e) {
     if (e instanceof CuitDuplicado) return res.status(409).json({ error: 'Ya existe un cliente con ese CUIT' });
     throw e;
@@ -128,7 +135,7 @@ router.delete('/:id', async (req, res) => {
   }
   await ref.update({ estado: 'INACTIVO', actualizadoEn: new Date() });
   await invalidar();
-  res.json(salida(aObjeto(await ref.get())));
+  res.json(salida(aObjeto(await ref.get()), req.usuario.verDinero));
 });
 
 // ---- Historial de interacciones (subcolección clientes/{id}/interacciones) ----

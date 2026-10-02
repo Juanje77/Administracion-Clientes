@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { api, ErrorApi } from '../api';
+import { useAuth } from '../auth';
 
 const VACIO = {
   razonSocial: '', cuit: '', email: '', telefono: '', direccion: '', ciudad: '', notas: '',
@@ -19,6 +20,7 @@ function Campo({ etiqueta, error, children }) {
 }
 
 export default function ClienteForm() {
+  const { usuario } = useAuth();
   const { id } = useParams();
   const navegar = useNavigate();
   const [f, setF] = useState(VACIO);
@@ -109,9 +111,11 @@ export default function ClienteForm() {
             <span>Enviarle recordatorios por email de vencimientos y honorarios pendientes <span className="text-slate-500">(solo si tiene email y el administrador activó los recordatorios en <em>Avisos</em>)</span></span>
           </label>
         </div>
-        <Campo etiqueta="Abono mensual (honorarios, en $)" error={err('abonoMensual')}>
-          <input type="number" step="0.01" min="0" className="campo" placeholder="Ej. 85000" value={f.abonoMensual} onChange={set('abonoMensual')} />
-        </Campo>
+        {usuario.verDinero && (
+          <Campo etiqueta="Abono mensual (honorarios, en $)" error={err('abonoMensual')}>
+            <input type="number" step="0.01" min="0" className="campo" placeholder="Ej. 85000" value={f.abonoMensual} onChange={set('abonoMensual')} />
+          </Campo>
+        )}
         <Campo etiqueta="Régimen (Ganancias, IIBB, etc.)">
           <input className="campo" value={f.regimen} onChange={set('regimen')} />
         </Campo>

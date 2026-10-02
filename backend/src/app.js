@@ -6,7 +6,7 @@ require('express-async-errors');
 const express = require('express');
 const helmet = require('helmet');
 const cookieParser = require('cookie-parser');
-const { requiereLogin } = require('./middleware/auth');
+const { requiereLogin, requiereDinero } = require('./middleware/auth');
 
 const app = express();
 // Detrás del proxy del hosting (Vercel): sin esto el límite de intentos de login vería siempre la misma IP.
@@ -24,7 +24,7 @@ app.use('/api/vencimientos', requiereLogin, require('./routes/vencimientos'));
 app.use('/api/alertas', requiereLogin, require('./routes/alertas'));
 app.use('/api/calendarios', requiereLogin, require('./routes/calendarios'));
 app.use('/api/importacion', requiereLogin, require('./routes/importacion'));
-app.use('/api/honorarios', requiereLogin, require('./routes/honorarios'));
+app.use('/api/honorarios', requiereLogin, requiereDinero, require('./routes/honorarios'));
 app.use('/api/dashboard', requiereLogin, require('./routes/dashboard'));
 app.use('/api/exportar', requiereLogin, require('./routes/exportar'));
 app.use('/api/documentos', requiereLogin, require('./routes/documentos'));

@@ -1,10 +1,12 @@
 const router = require('express').Router();
 const bcrypt = require('bcryptjs');
 const { db } = require('../db');
-const { requiereAdmin } = require('../middleware/auth');
-const { usuarioSchema } = require('../validacion');
+const { requiereAdmin, olvidarUsuario } = require('../middleware/auth');
+const { usuarioSchema, usuarioCambiosSchema } = require('../validacion');
+const { puedeVerDinero } = require('../permisos');
 
-const publico = (id, u) => ({ id, nombre: u.nombre, email: u.email, rol: u.rol, activo: u.activo });
+// verDinero = acceso efectivo (los administradores siempre lo tienen)
+const publico = (id, u) => ({ id, nombre: u.nombre, email: u.email, rol: u.rol, activo: u.activo, verDinero: puedeVerDinero(u) });
 
 // Lista mínima del equipo (para asignar tareas); disponible para cualquier usuario con sesión.
 router.get('/equipo', async (_req, res) => {
@@ -39,13 +41,16 @@ router.post('/', async (req, res) => {
   res.status(201).json(publico(ref.id, nuevo));
 });
 
-// Activar/desactivar usuario (no se borra para conservar el historial).
+// Activar/desactivar un usuario (no se borra, para conservar el historial) y darle o quitarle el acceso a los montos.
 router.patch('/:id', async (req, res) => {
   const { id } = req.params;
   if (id === req.usuario.id) return res.status(400).json({ error: 'No puedes modificarte a ti mismo' });
+  const r = usuarioCambiosSchema.safeParse(req.body);
+  if (!r.success) return res.status(400).json({ error: 'Datos inválidos' });
   const ref = db.collection('usuarios').doc(id);
   if (!(await ref.get()).exists) return res.status(404).json({ error: 'Usuario no encontrado' });
-  await ref.update({ activo: Boolean(req.body.activo) });
+  await ref.update(r.data);
+  olvidarUsuario(id); // el cambio vale desde la próxima petición de esa persona
   res.json(publico(id, (await ref.get()).data()));
 });
 

@@ -23,6 +23,7 @@ router.get('/', async (req, res) => {
   if (!parsed.success) return res.status(400).json({ error: 'Período inválido (AAAA-MM)' });
   const periodo = parsed.data;
   const avisos = [];
+  const dinero = req.usuario.verDinero; // quien no tiene acceso a los montos ni siquiera los calcula
   const tomar = (r, nombre) => {
     if (r.status === 'fulfilled') return r.value;
     console.error(`[dashboard] ${nombre}:`, r.reason);
@@ -33,8 +34,8 @@ router.get('/', async (req, res) => {
   const [rClientes, rAgenda, rDeuda, rSerie] = await Promise.allSettled([
     todosLosClientes(),
     resumenAlertas(req.usuario.id),
-    deudores(),
-    asegurarResumenes().then(() => leerSerie(ultimosMeses(periodo, 6))),
+    dinero ? deudores() : Promise.resolve(null),
+    dinero ? asegurarResumenes().then(() => leerSerie(ultimosMeses(periodo, 6))) : Promise.resolve(null),
   ]);
   const clientes = tomar(rClientes, 'clientes');
   const agenda = tomar(rAgenda, 'pendientes urgentes');
@@ -44,6 +45,7 @@ router.get('/', async (req, res) => {
 
   res.json({
     periodo,
+    dinero,
     avisos,
     clientes: clientes && {
       total: clientes.length,
@@ -52,13 +54,13 @@ router.get('/', async (req, res) => {
       inactivos: clientes.filter((c) => c.estado === 'INACTIVO').length,
       nuevosMes: clientes.filter((c) => c.creadoEn && c.creadoEn.toISOString().slice(0, 7) === periodo).length,
     },
-    honorarios: {
+    honorarios: dinero ? {
       facturado: actual?.facturado ?? null,
       cobrado: actual?.cobrado ?? null,
       deudaTotal: deuda?.total ?? null,
       deudoresCantidad: deuda?.datos.length ?? null,
       topDeudores: deuda?.datos.slice(0, 5) ?? [],
-    },
+    } : null,
     serie,
     agenda,
   });

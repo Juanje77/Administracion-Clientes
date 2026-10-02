@@ -12,6 +12,7 @@ const { db, aObjeto, errorConfig } = require('../db');
 const { todosLosClientes } = require('../cache');
 const { hoy: hoyReal, sumarDias } = require('../util');
 const { deudores: calcularDeudores } = require('./honorarios');
+const { puedeVerDinero } = require('../permisos');
 const correo = require('../correo/transporte');
 const P = require('../correo/plantillas');
 
@@ -91,7 +92,7 @@ async function planificar({ hoy: h = hoyReal() } = {}) {
         proximas: mias.filter((x) => x.vence > h && x.vence <= limite7),
       };
       let deudores;
-      if (u.rol === 'ADMIN') {
+      if (puedeVerDinero(u)) {
         deuda ??= await calcularDeudores();
         if (deuda.datos.length) deudores = { total: deuda.total, top: deuda.datos.slice(0, 10) };
       }

@@ -62,7 +62,12 @@ const usuarioSchema = z.object({
   email: z.string().trim().toLowerCase().email(),
   password: z.string().min(8, 'Mínimo 8 caracteres'),
   rol: z.enum(['ADMIN', 'USUARIO']).default('USUARIO'),
+  // Acceso a honorarios, cobros, deudas y montos (los administradores siempre lo tienen).
+  verDinero: z.boolean().default(false),
 });
+
+const usuarioCambiosSchema = z.object({ activo: z.boolean().optional(), verDinero: z.boolean().optional() })
+  .refine((c) => c.activo !== undefined || c.verDinero !== undefined, 'Nada para cambiar');
 
 // Fecha "AAAA-MM-DD" que exista de verdad (rechaza 2026-02-31).
 const fecha = z
@@ -144,7 +149,7 @@ const passwordSchema = z.object({
 });
 
 module.exports = {
-  cuitValido, clienteSchema, interaccionSchema, usuarioSchema,
+  cuitValido, clienteSchema, interaccionSchema, usuarioSchema, usuarioCambiosSchema,
   tareaSchema, tareaCambiosSchema, vencimientoSchema, calendarioSchema, passwordSchema, periodo,
   honorarioSchema, honorarioCambiosSchema, pagoSchema, CATEGORIAS_DOC, avisosConfigSchema,
 };

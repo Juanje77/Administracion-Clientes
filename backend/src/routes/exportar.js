@@ -5,6 +5,7 @@ const { filtrarYOrdenar } = require('../servicios/clientes');
 const { consultar, deudores } = require('../servicios/honorarios');
 const { TIPOS } = require('../exportar/tabla');
 const { hoy } = require('../util');
+const { requiereDinero } = require('../middleware/auth');
 const { periodo: periodoSchema } = require('../validacion');
 
 const ESTADO = { ACTIVO: 'Activo', INACTIVO: 'Inactivo', POTENCIAL: 'Potencial' };
@@ -24,7 +25,7 @@ async function enviar(res, formato, tabla, nombre, permitidos) {
 // Las columnas coinciden con la plantilla de importación: el Excel exportado se puede volver a importar.
 router.get('/clientes.:formato', async (req, res) => {
   const lista = filtrarYOrdenar(await todosLosClientes(), req.query);
-  await enviar(res, req.params.formato, {
+  const tabla = {
     hoja: 'Clientes',
     columnas: [
       { titulo: 'Nombre / Razón social', ancho: 34 }, { titulo: 'CUIT', ancho: 16 }, { titulo: 'Email', ancho: 28 }, { titulo: 'Teléfono', ancho: 16 },
@@ -34,10 +35,17 @@ router.get('/clientes.:formato', async (req, res) => {
     ],
     filas: lista.map((c) => [c.razonSocial, c.cuit, c.email, c.telefono, c.direccion, c.ciudad, ESTADO[c.estado], PERSONA[c.tipoPersona], c.condicionIva,
       c.regimen, (c.etiquetas || []).join(', '), c.abonoMensual, c.notas, fecha(c.creadoEn)]),
-  }, 'clientes', ['xlsx', 'csv']);
+  };
+  // El abono mensual es dinero: quien no tiene acceso a los montos no lo recibe en la planilla.
+  if (!req.usuario.verDinero) {
+    const i = tabla.columnas.findIndex((c) => c.titulo === 'Abono mensual');
+    tabla.columnas.splice(i, 1);
+    tabla.filas = tabla.filas.map((f) => f.filter((_, j) => j !== i));
+  }
+  await enviar(res, req.params.formato, tabla, 'clientes', ['xlsx', 'csv']);
 });
 
-router.get('/honorarios.:formato', async (req, res) => {
+router.get('/honorarios.:formato', requiereDinero, async (req, res) => {
   const p = periodoSchema.safeParse(req.query.periodo ?? hoy().slice(0, 7));
   if (!p.success) return res.status(400).json({ error: 'Período inválido (AAAA-MM)' });
   const { datos, totales } = await consultar({ periodo: p.data, estado: req.query.estado, q: req.query.q });
@@ -54,7 +62,7 @@ router.get('/honorarios.:formato', async (req, res) => {
   }, 'honorarios', ['xlsx', 'pdf']);
 });
 
-router.get('/deudores.:formato', async (req, res) => {
+router.get('/deudores.:formato', requiereDinero, async (req, res) => {
   const { datos, total } = await deudores();
   await enviar(res, req.params.formato, {
     hoja: 'Deudores',

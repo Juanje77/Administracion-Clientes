@@ -56,23 +56,23 @@ export default function Inicio() {
               <button className="mt-1 text-blue-700 hover:underline" onClick={cargar}>Reintentar</button>
             </div>
           )}
-          {/* Una sola cifra protagonista: lo cobrado en el período */}
-          <section className="rounded-lg border bg-white p-5 sm:p-6">
+          {/* Una sola cifra protagonista: lo cobrado en el período (solo para quien tiene acceso a los montos) */}
+          {d.dinero && <section className="rounded-lg border bg-white p-5 sm:p-6">
             <p className="text-sm text-slate-500">Cobrado en {nombrePeriodo(d.periodo)}</p>
             <p className="mt-1 break-words text-3xl font-semibold text-slate-900 sm:text-5xl">{valor(d.honorarios.cobrado)}</p>
             <p className="mt-2 text-sm text-slate-600">de {valor(d.honorarios.facturado)} facturados en el mes</p>
-          </section>
+          </section>}
 
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <Tile titulo="Deuda total de clientes" valor={valor(d.honorarios.deudaTotal)} color={d.honorarios.deudaTotal > 0 ? 'text-red-600' : 'text-slate-400'} detalle={d.honorarios.deudoresCantidad === null ? undefined : `${d.honorarios.deudoresCantidad} clientes`} a="/honorarios" />
+          <div className={`grid grid-cols-2 gap-3 ${d.dinero ? 'lg:grid-cols-4' : 'lg:grid-cols-3'}`}>
+            {d.dinero && <Tile titulo="Deuda total de clientes" valor={valor(d.honorarios.deudaTotal)} color={d.honorarios.deudaTotal > 0 ? 'text-red-600' : 'text-slate-400'} detalle={d.honorarios.deudoresCantidad === null ? undefined : `${d.honorarios.deudoresCantidad} clientes`} a="/honorarios" />}
             <Tile titulo="Clientes activos" valor={d.clientes?.activos ?? '—'} detalle={d.clientes && `${d.clientes.total} en total · ${d.clientes.potenciales} potenciales`} a="/clientes" />
             <Tile titulo={`Nuevos en ${nombrePeriodo(d.periodo)}`} valor={d.clientes?.nuevosMes ?? '—'} a="/clientes" />
             <Tile titulo="Pendientes urgentes" valor={d.agenda?.urgentes ?? '—'} color={d.agenda?.urgentes > 0 ? 'text-red-600' : 'text-slate-400'} detalle="vencidos o para hoy" a="/agenda" />
           </div>
 
-          {d.serie && <GraficoMeses serie={d.serie} seleccionado={d.periodo} />}
+          {d.dinero && d.serie && <GraficoMeses serie={d.serie} seleccionado={d.periodo} />}
 
-          {d.honorarios.deudaTotal !== null && <section className="rounded-lg border bg-white p-4 sm:p-6">
+          {d.dinero && d.honorarios.deudaTotal !== null && <section className="rounded-lg border bg-white p-4 sm:p-6">
             <div className="mb-3 flex items-baseline justify-between">
               <h2 className="font-semibold">Mayores deudores</h2>
               <Link to="/honorarios" className="text-sm text-blue-700 hover:underline">Ver todos</Link>
@@ -88,7 +88,7 @@ export default function Inicio() {
               {d.honorarios.topDeudores.length === 0 && <li className="py-4 text-center text-sm text-slate-500">Nadie debe nada. 🎉</li>}
             </ul>
           </section>}
-          {usuario.rol === 'ADMIN' && (
+          {d.dinero && usuario.rol === 'ADMIN' && (
             <p className="text-xs text-slate-500">
               ¿Los totales no coinciden? <button className="text-blue-700 hover:underline disabled:opacity-50" onClick={recalcular} disabled={recalculando}>{recalculando ? 'Recalculando…' : 'Recalcular totales'}</button>
             </p>

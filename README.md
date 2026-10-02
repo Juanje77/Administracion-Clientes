@@ -100,6 +100,22 @@ por eso funciona también con varias instancias a la vez. Es adecuado para hasta
 Las tareas y vencimientos pendientes llevan un campo auxiliar (`alerta`) que desaparece al cerrarlos, para consultar
 solo lo pendiente sin leer el historial.
 
+## Quién ve el dinero
+**Todo lo que es dinero lo ve únicamente quien tiene acceso a los montos.** Los administradores siempre lo tienen; un usuario común **no lo tiene por defecto** y un administrador
+puede dárselo o quitárselo en cualquier momento desde *Usuarios* (casilla "Puede ver honorarios, cobros, deudas y montos"). Es el servidor el que lo aplica, no solo la pantalla.
+
+| Sin acceso a los montos | Con acceso |
+|---|---|
+| Ve clientes, agenda, tareas, calendario, documentos e Inicio con clientes y pendientes | Además: Honorarios, cobros y deudores |
+| No ve el abono mensual del cliente y no puede cambiarlo | Ve y edita el abono |
+| El Inicio no muestra cobrado, facturado, deuda, gráfico ni deudores | Inicio completo |
+| No puede descargar honorarios ni deudores; la planilla de clientes no trae el abono | Todas las exportaciones |
+| Su resumen diario por email no incluye la deuda | El resumen incluye los deudores |
+
+Anular un cobro o borrar un honorario sigue siendo solo de administradores, tengan o no acceso a los montos.
+Los cambios valen desde la siguiente petición de esa persona (sin que tenga que volver a entrar; en producción puede demorar hasta 30 segundos).
+**Desactivar a un usuario cierra su sesión de inmediato** (antes seguía valiendo hasta 8 horas).
+
 ## Roles
 - **Administrador:** gestiona usuarios y puede eliminar clientes definitivamente.
 - **Usuario:** opera clientes e interacciones. "Eliminar" archiva (estado Inactivo).
