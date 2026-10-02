@@ -6,10 +6,13 @@ import Situacion from '../componentes/Situacion';
 import Dato from '../componentes/Dato';
 import { FilaTarea, FormularioTarea, avisarAlertas, textoAviso, useEquipo } from '../componentes/Tareas';
 import Alerta from '../componentes/Alerta';
+import { useAuth } from '../auth';
 
 export default function Agenda() {
   const [tareas, setTareas] = useState([]);
   const [venc, setVenc] = useState([]);
+  const { usuario } = useAuth();
+  const esAdmin = usuario.rol === 'ADMIN';
   const equipo = useEquipo();
   const [responsable, setResponsable] = useState('yo'); // 'yo' | 'todos' | id de una persona
   const [dias, setDias] = useState(7);
@@ -57,11 +60,11 @@ export default function Agenda() {
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="titulo-seccion">Tareas pendientes</h2>
           <div className="flex flex-wrap items-center gap-2">
-            <select className="campo w-44" value={responsable} onChange={(e) => setResponsable(e.target.value)} aria-label="Ver tareas de">
+            {esAdmin && <select className="campo w-44" value={responsable} onChange={(e) => setResponsable(e.target.value)} aria-label="Ver tareas de">
               <option value="yo">Mis tareas</option>
               <option value="todos">Todo el equipo</option>
               {equipo.map((p) => <option key={p.id} value={p.id}>Tareas de {p.nombre}</option>)}
-            </select>
+            </select>}
             {!creando && <button className="btn-primario" onClick={() => { setCreando(true); setEditando(null); setMsg(''); }}>+ Nueva tarea</button>}
           </div>
         </div>

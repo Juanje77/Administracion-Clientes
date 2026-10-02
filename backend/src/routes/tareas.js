@@ -23,7 +23,9 @@ const salida = (t, clientes, usuarios) => ({
 // Con clienteId se devuelven todas las tareas de ese cliente (hechas y pendientes).
 // Sin clienteId (Agenda) solo las pendientes: lo vencido más lo que vence en los próximos `dias`.
 router.get('/', async (req, res) => {
-  const { clienteId, asignado } = req.query;
+  const { clienteId } = req.query;
+  // La Agenda del equipo entero (o de otra persona) es solo para administradores: el resto ve únicamente sus tareas.
+  const asignado = req.usuario.rol === 'ADMIN' || clienteId ? req.query.asignado : 'yo';
   const limite = sumarDias(hoy(), diasAgenda(req.query.dias));
   if (clienteId && !(await exigirCliente(req, res, String(clienteId)))) return;
   let consulta = tareas();

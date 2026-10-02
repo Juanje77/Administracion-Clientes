@@ -1522,6 +1522,15 @@ describe('permisos por cliente', () => {
     await rita.get('/api/exportar/deudores.xlsx').expect(200);
   });
 
+  it('la Agenda del equipo entero es solo para administradores', async () => {
+    const ajena = (await admin.post('/api/tareas').send({ titulo: 'Tarea de Tomás', vence: hoy(), asignadoA: u.tomas }).expect(201)).body;
+    const ids = (r) => r.body.map((t) => t.id);
+    expect(ids(await rita.get('/api/tareas').expect(200))).not.toContain(ajena.id); // sin filtro: solo las suyas
+    expect(ids(await rita.get(`/api/tareas?asignado=${u.tomas}`).expect(200))).not.toContain(ajena.id);
+    expect(ids(await admin.get('/api/tareas').expect(200))).toContain(ajena.id);
+    expect(ids(await admin.get(`/api/tareas?asignado=${u.tomas}`).expect(200))).toContain(ajena.id);
+  });
+
   it('el resumen por email trae solo lo de sus clientes', async () => {
     const { planificar } = require('../src/servicios/avisos');
     const plan = await planificar({ hoy: hoy() });
