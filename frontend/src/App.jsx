@@ -10,6 +10,7 @@ import Usuarios from './paginas/Usuarios';
 import Agenda from './paginas/Agenda';
 import Cuenta from './paginas/Cuenta';
 import Calendario from './paginas/Calendario';
+import Importar from './paginas/Importar';
 
 function Layout({ children }) {
   const { usuario, logout } = useAuth();
@@ -66,6 +67,7 @@ export default function App() {
         <Route path="/clientes/:id" element={<ClienteDetalle />} />
         <Route path="/clientes/:id/editar" element={<ClienteForm />} />
         {usuario.rol === 'ADMIN' && <Route path="/usuarios" element={<Usuarios />} />}
+        {usuario.rol === 'ADMIN' && <Route path="/importar" element={<Importar />} />}
         <Route path="*" element={<Navigate to="/agenda" replace />} />
       </Routes>
     </Layout>

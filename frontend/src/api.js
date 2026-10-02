@@ -11,7 +11,7 @@ export async function api(ruta, { metodo = 'GET', cuerpo } = {}) {
   const esArchivo = typeof Blob !== 'undefined' && cuerpo instanceof Blob;
   const r = await fetch(`/api${ruta}`, {
     method: metodo,
-    headers: cuerpo ? { 'Content-Type': esArchivo ? cuerpo.type : 'application/json' } : undefined,
+    headers: cuerpo ? { 'Content-Type': esArchivo ? cuerpo.type || 'application/octet-stream' : 'application/json' } : undefined,
     body: cuerpo ? (esArchivo ? cuerpo : JSON.stringify(cuerpo)) : undefined,
     credentials: 'same-origin',
   });

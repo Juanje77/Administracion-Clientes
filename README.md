@@ -99,6 +99,15 @@ solo lo pendiente sin leer el historial.
 - "Hoy" se calcula en horario de Argentina; se cambia con la variable `TZ_NEGOCIO` del `.env`.
 - **Mi cuenta:** cada usuario puede cambiar su contraseña (clic en tu nombre, arriba a la derecha).
 
+## Importar clientes desde Excel / CSV
+Solo administradores: *Clientes → Importar desde Excel*.
+1. Sube tu planilla (.xlsx o .csv; hay una plantilla de ejemplo para descargar). Las columnas se reconocen por su nombre
+   (Nombre/Cliente/Razón social, CUIT/CUIL/DNI, Correo, Celular, Localidad, Condición IVA, Estado, Etiquetas, Notas…) y puedes corregirlas.
+2. La **vista previa** no guarda nada: marca cada fila como *Listo*, *Revisar* (se importa, con un dato dudoso) o *Se omite*.
+3. Al confirmar se crean los clientes. Reglas: un CUIT inválido, un DNI, un email o teléfono raro no frenan la fila (el dato
+   original queda en *Notas*); solo se omiten las filas sin nombre y los duplicados (mismo CUIT, o mismo nombre si no hay CUIT).
+   Sin estado en la planilla: queda *Activo* si tiene CUIT y condición IVA, y *Potencial* si no. Importar dos veces el mismo archivo no duplica.
+
 ## Calendario impositivo mensual
 1. **Cada mes:** menú *Calendario* → *Cargar calendario del mes (PDF)* y eliges el PDF "Calendario de vencimientos"
    (el formato de Errepar). El sistema lo lee solo.

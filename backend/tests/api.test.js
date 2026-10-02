@@ -345,3 +345,100 @@ describe('función de Vercel (api/index.js)', () => {
     }
   });
 });
+
+// ---------- Importación de clientes desde Excel / CSV ----------
+describe('importación de clientes', () => {
+  const writeXlsxFile = require('write-excel-file/node').default;
+  const celda = (value) => ({ value, type: typeof value === 'number' ? Number : String });
+  const xlsx = async (filas) => Buffer.from(await writeXlsxFile(filas.map((f) => f.map(celda))).toBuffer());
+  const subir = (agente, cuerpo, query = '') => agente.post(`/api/importacion/clientes${query}`).set('Content-Type', 'application/octet-stream').send(cuerpo);
+
+  const cuitFisica = cuitDe('2712345678');   // persona física (27)
+  const cuitSociedad = cuitDe('3012345678'); // persona jurídica (30)
+  const cuitMalo = cuitSociedad.slice(0, 10) + String((Number(cuitSociedad[10]) + 1) % 10);
+  let archivo;
+
+  beforeAll(async () => {
+    for (const c of ['clientes', 'cuits']) await db.recursiveDelete(db.collection(c));
+    await invalidar();
+    archivo = await xlsx([
+      ['Cliente', 'CUIT/DNI', 'Correo', 'Celular', 'Localidad', 'Condición IVA', 'Estado', 'Etiquetas', 'Observaciones'],
+      ['Ana Gómez', Number(cuitFisica), 'ANA@x.com', 2954123456, 'Santa Rosa', 'Monotributo', 'Activo', 'mensual, sueldos', 'Llamar en marzo'],
+      ['Sociedad Uno SRL', cuitSociedad, 'uno@x.com', '2954-111222', 'General Pico', 'RI', '', '', ''],
+      ['Sin Cuit Pérez', '', '', '', '', '', '', '', ''],
+      ['Persona Con Dni', 30123456, '', '', '', '', '', '', ''],
+      ['Cuit Equivocado', cuitMalo, '', '', '', '', '', '', ''],
+      ['', cuitDe('2799999999'), '', '', '', '', '', '', ''],
+      ['Ana Repetida', cuitFisica, '', '', '', '', '', '', ''],
+      ['Mail Malo', '', 'no-es-mail', 'abc', '', '', '', '', ''],
+    ]);
+  });
+
+  it('solo los administradores importan', async () => {
+    await subir(user, archivo).expect(403);
+    await user.get('/api/importacion/plantilla').expect(403);
+  });
+
+  it('detecta columnas, normaliza y clasifica sin guardar nada', async () => {
+    const r = (await subir(admin, archivo).expect(200)).body;
+    expect(r.mapeo).toMatchObject({ 0: 'razonSocial', 1: 'cuit', 2: 'email', 3: 'telefono', 4: 'ciudad', 5: 'condicionIva', 6: 'estado', 7: 'etiquetas', 8: 'notas' });
+    expect(r.resumen).toEqual({ total: 8, ok: 2, advertencias: 4, rechazadas: 2 });
+    const fila = (nombre) => r.filas.find((f) => f.nombre === nombre);
+    expect(fila('Ana Gómez').datos).toMatchObject({
+      cuit: `${cuitFisica.slice(0, 2)}-${cuitFisica.slice(2, 10)}-${cuitFisica[10]}`, email: 'ana@x.com', tipoPersona: 'FISICA',
+      condicionIva: 'Monotributista', estado: 'ACTIVO', etiquetas: ['mensual', 'sueldos'], notas: 'Llamar en marzo', ciudad: 'Santa Rosa',
+    });
+    expect(fila('Sociedad Uno SRL').datos).toMatchObject({ estado: 'ACTIVO', tipoPersona: 'JURIDICA' }); // estado calculado
+    expect(fila('Sin Cuit Pérez')).toMatchObject({ estado: 'ADVERTENCIA' });
+    expect(fila('Sin Cuit Pérez').datos.estado).toBe('POTENCIAL');
+    expect(fila('Persona Con Dni').datos).toMatchObject({ cuit: null, notas: 'DNI: 30123456' });
+    expect(fila('Cuit Equivocado').advertencias[0]).toMatch(/CUIT inválido/);
+    expect(fila('Mail Malo').datos).toMatchObject({ email: null, telefono: null });
+    expect(r.filas.find((f) => f.n === 7).motivo).toMatch(/nombre/i);
+    expect(fila('Ana Repetida').motivo).toMatch(/Ya existe un cliente con ese CUIT/);
+    expect((await admin.get('/api/clientes').expect(200)).body.total).toBe(0); // la vista previa no guarda
+  });
+
+  it('confirma la importación y volver a importar no duplica', async () => {
+    const r = (await subir(admin, archivo, '?confirmar=1').expect(201)).body;
+    expect(r).toMatchObject({ creados: 6, fallidos: 0, rechazadas: 2, conAdvertencias: 4 });
+    const lista = (await admin.get('/api/clientes?porPagina=50').expect(200)).body;
+    expect(lista.total).toBe(6);
+    expect(lista.datos.find((c) => c.razonSocial === 'Ana Gómez').etiquetas.map((e) => e.nombre)).toEqual(['mensual', 'sueldos']);
+    // El CUIT importado queda reservado: no se puede crear otro cliente igual a mano
+    await admin.post('/api/clientes').send({ razonSocial: 'Otro', cuit: cuitSociedad }).expect(409);
+    const otra = (await subir(admin, archivo, '?confirmar=1').expect(201)).body;
+    expect(otra).toMatchObject({ creados: 0, rechazadas: 8 });
+    expect((await admin.get('/api/clientes').expect(200)).body.total).toBe(6);
+  });
+
+  it('lee CSV con ; y acentos de Windows, y respeta comillas', async () => {
+    const csv = 'Razón social;CUIT;Teléfono;Notas\r\nJosé Núñez;' + cuitDe('2055555555') + ';2954 555555;"Dijo: ""hola""; vuelve mañana"\r\n';
+    const r = (await subir(admin, Buffer.from(csv, 'latin1')).expect(200)).body;
+    expect(r.filas[0].datos).toMatchObject({ razonSocial: 'José Núñez', telefono: '2954 555555', notas: 'Dijo: "hola"; vuelve mañana' });
+    expect(r.resumen.rechazadas).toBe(0);
+  });
+
+  it('permite corregir el mapeo de columnas', async () => {
+    const raro = await xlsx([['Dato A', 'Dato B'], ['Cliente Raro SA', cuitDe('3077777777')]]);
+    expect((await subir(admin, raro).expect(200)).body.resumen).toMatchObject({ rechazadas: 1 });
+    const mapeo = encodeURIComponent(JSON.stringify({ 0: 'razonSocial', 1: 'cuit' }));
+    const r = (await subir(admin, raro, `?mapeo=${mapeo}`).expect(200)).body;
+    expect(r.resumen).toMatchObject({ total: 1, rechazadas: 0 });
+    expect(r.filas[0].datos.tipoPersona).toBe('JURIDICA');
+  });
+
+  it('rechaza archivos vacíos o ilegibles', async () => {
+    await subir(admin, Buffer.from('solo,encabezados\n')).expect(422);
+    await admin.post('/api/importacion/clientes').expect(400);
+  });
+
+  it('la plantilla descargable se puede importar tal cual, sin avisos', async () => {
+    for (const c of ['clientes', 'cuits']) await db.recursiveDelete(db.collection(c)); // el ejemplo usa un CUIT que otro test ya cargó
+    await invalidar();
+    const r = await admin.get('/api/importacion/plantilla').buffer(true).parse((res, cb) => { const d = []; res.on('data', (c) => d.push(c)); res.on('end', () => cb(null, Buffer.concat(d))); }).expect(200);
+    expect(r.headers['content-disposition']).toMatch(/plantilla-clientes\.xlsx/);
+    const vista = (await subir(admin, r.body).expect(200)).body;
+    expect(vista.resumen).toEqual({ total: 1, ok: 1, advertencias: 0, rechazadas: 0 });
+  });
+});

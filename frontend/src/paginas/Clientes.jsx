@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
 import Estado from '../componentes/Estado';
+import { useAuth } from '../auth';
 
 const COLUMNAS = [
   ['razonSocial', 'Razón social'],
@@ -13,6 +14,7 @@ const COLUMNAS = [
 ];
 
 export default function Clientes() {
+  const { usuario } = useAuth();
   const [filtros, setFiltros] = useState({ q: '', estado: '', ciudad: '', etiqueta: '' });
   const [orden, setOrden] = useState({ campo: 'razonSocial', dir: 'asc' });
   const [pagina, setPagina] = useState(1);
@@ -48,7 +50,10 @@ export default function Clientes() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">Clientes <span className="text-sm font-normal text-slate-500">({resultado.total})</span></h1>
-        <Link to="/clientes/nuevo" className="btn-primario">+ Nuevo cliente</Link>
+        <div className="flex gap-2">
+          {usuario.rol === 'ADMIN' && <Link to="/importar" className="btn-sec">Importar desde Excel</Link>}
+          <Link to="/clientes/nuevo" className="btn-primario">+ Nuevo cliente</Link>
+        </div>
       </div>
 
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
