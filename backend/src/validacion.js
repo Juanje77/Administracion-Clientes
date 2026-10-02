@@ -33,6 +33,8 @@ const clienteSchema = z
     condicionIva: opcional(z.string().trim()),
     regimen: opcional(z.string().trim()),
     etiquetas: z.array(z.string().trim().min(1)).max(20).optional(),
+    // Claves de las obligaciones del calendario impositivo que tiene este cliente.
+    obligaciones: z.array(z.string().trim().min(1)).max(100).optional(),
   })
   .superRefine((c, ctx) => {
     // Datos fiscales obligatorios solo para clientes activos.
@@ -85,16 +87,19 @@ const vencimientoSchema = z.object({
   notas: opcional(z.string().trim()),
 });
 
-// Grupos de terminación de CUIT usados por el calendario impositivo.
-const GRUPOS_CUIT = ['0-1', '2-3', '4-5', '6-7', '8-9'];
-const generarSchema = z.object({
-  impuesto: z.string().trim().min(2, 'El impuesto es obligatorio'),
-  periodo,
-  fechas: z
-    .partialRecord(z.enum(GRUPOS_CUIT), fecha)
-    .refine((f) => Object.keys(f).length > 0, 'Indica al menos una fecha'),
-  etiqueta: opcional(z.string().trim()),
-  incluirInactivos: z.boolean().default(false),
+const DIGITOS = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
+const filaCalendarioSchema = z.object({
+  seccion: z.string().trim().max(200).default(''),
+  obligacion: z.string().trim().min(1, 'Falta la obligación').max(300),
+  concepto: z.string().trim().max(500).default(''),
+  notas: z.string().trim().max(2000).default(''),
+  clave: z.string().trim().min(1).max(300),
+  titulo: z.string().trim().min(1).max(500),
+  // Fecha de vencimiento para cada último dígito del CUIT (null = no vence/no informado).
+  fechas: z.object(Object.fromEntries(DIGITOS.map((d) => [d, fecha.nullable()]))),
+});
+const calendarioSchema = z.object({
+  filas: z.array(filaCalendarioSchema).min(1, 'El calendario no tiene filas').max(300),
 });
 
 const passwordSchema = z.object({
@@ -104,5 +109,5 @@ const passwordSchema = z.object({
 
 module.exports = {
   cuitValido, clienteSchema, interaccionSchema, usuarioSchema,
-  tareaSchema, tareaCambiosSchema, vencimientoSchema, generarSchema, passwordSchema, GRUPOS_CUIT,
+  tareaSchema, tareaCambiosSchema, vencimientoSchema, calendarioSchema, passwordSchema, periodo,
 };

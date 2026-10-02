@@ -17,7 +17,7 @@ const claveCuit = (cuit) => (cuit ? String(cuit).replace(/\D/g, '') : null);
 const normalizarEtiquetas = (lista = []) => [...new Set(lista.map((n) => n.toLowerCase()))].sort();
 
 // Respuesta de la API: las etiquetas se muestran como objetos { nombre }.
-const salida = (c) => ({ ...c, etiquetas: (c.etiquetas || []).map((nombre) => ({ nombre })) });
+const salida = (c) => ({ ...c, obligaciones: c.obligaciones || [], etiquetas: (c.etiquetas || []).map((nombre) => ({ nombre })) });
 
 // El CUIT es único: se reserva un documento cuits/{11 dígitos} dentro de una transacción.
 class CuitDuplicado extends Error {}
@@ -72,7 +72,7 @@ router.post('/', async (req, res) => {
   const { etiquetas, ...datos } = r.data;
   const ahora = new Date();
   const ref = clientes().doc();
-  const nuevo = { ...datos, etiquetas: normalizarEtiquetas(etiquetas), creadoEn: ahora, actualizadoEn: ahora };
+  const nuevo = { ...datos, obligaciones: datos.obligaciones ?? [], etiquetas: normalizarEtiquetas(etiquetas), creadoEn: ahora, actualizadoEn: ahora };
   const clave = claveCuit(datos.cuit);
   try {
     await db.runTransaction(async (tx) => {

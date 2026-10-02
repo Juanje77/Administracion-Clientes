@@ -14,7 +14,7 @@ async function login(email, password = 'clave12345') {
 }
 
 beforeAll(async () => {
-  for (const c of ['clientes', 'cuits', 'usuarios']) await db.recursiveDelete(db.collection(c));
+  for (const c of ['clientes', 'cuits', 'usuarios', 'tareas', 'vencimientos', 'calendarios']) await db.recursiveDelete(db.collection(c));
   invalidar();
   const passwordHash = await bcrypt.hash('clave12345', 4);
   await db.collection('usuarios').add({ nombre: 'Admin', email: 'admin@t.com', passwordHash, rol: 'ADMIN', activo: true });
@@ -162,18 +162,6 @@ describe('tareas, vencimientos y alertas', () => {
     ids.venc = r.body.id;
   });
 
-  it('genera vencimientos masivos según terminación de CUIT', async () => {
-    const cuerpo = { impuesto: 'Ganancias', periodo: '2026-10', fechas: { '0-1': '2026-11-18', '2-3': '2026-11-19' } };
-    await user.post('/api/vencimientos/generar').send({ ...cuerpo, fechas: {} }).expect(400);
-    const r = await user.post('/api/vencimientos/generar').send(cuerpo).expect(201);
-    expect(r.body.creados).toBe(2); // Cliente C termina en 6-7 y no tiene fecha
-    // Repetir no duplica
-    const otra = await user.post('/api/vencimientos/generar').send(cuerpo).expect(201);
-    expect(otra.body).toMatchObject({ creados: 0, yaExistian: 2 });
-    // El filtro por etiqueta que no existe no genera nada
-    expect((await user.post('/api/vencimientos/generar').send({ ...cuerpo, impuesto: 'IIBB', etiqueta: 'otra' }).expect(201)).body.creados).toBe(0);
-  });
-
   it('marca presentado y refleja las alertas', async () => {
     const a = (await user.get('/api/alertas').expect(200)).body;
     expect(a.tareas).toMatchObject({ vencidas: 1, hoy: 1, proximas: 1 });
@@ -200,5 +188,90 @@ describe('cambio de contraseña', () => {
     await user.post('/api/auth/password').send({ actual: 'clave12345', nueva: 'nuevaclave1' }).expect(200);
     await request(app).post('/api/auth/login').send({ email: 'ana@t.com', password: 'clave12345' }).expect(401);
     await request(app).post('/api/auth/login').send({ email: 'ana@t.com', password: 'nuevaclave1' }).expect(200);
+  });
+});
+
+// ---------- Calendario impositivo ----------
+const fs = require('fs');
+const path = require('path');
+const PDF = path.join(__dirname, 'fixtures/calendario-octubre-2026.pdf');
+
+describe('calendario impositivo', () => {
+  it('rechaza lo que no es un PDF', async () => {
+    await user.post('/api/calendarios/importar').set('Content-Type', 'application/pdf').send(Buffer.from('hola')).expect(400);
+  });
+
+  // El PDF es material de terceros: no está en el repositorio, el test corre si existe en tests/fixtures.
+  it.skipIf(!fs.existsSync(PDF))('lee el PDF de Errepar completo y sin avisos', async () => {
+    const r = await user.post('/api/calendarios/importar').set('Content-Type', 'application/pdf').send(fs.readFileSync(PDF)).expect(200);
+    expect(r.body.periodo).toBe('2026-10');
+    expect(r.body.filas).toHaveLength(25);
+    expect(r.body.avisos).toEqual([]);
+    const fila = (txt) => r.body.filas.find((f) => f.titulo.includes(txt));
+    // Autónomos: 0-1 y 2-3 el 5; 4-5 y 6 el 6; 7-8 y 9 el 7
+    expect(fila('Autónomos').fechas).toMatchObject({ 0: '2026-10-05', 3: '2026-10-05', 4: '2026-10-06', 6: '2026-10-06', 8: '2026-10-07', 9: '2026-10-07' });
+    // "Todos" vence el mismo día para cualquier terminación
+    expect(Object.values(fila('Monotributo').fechas).every((f) => f === '2026-10-20')).toBe(true);
+    // Convenio Multilateral agrupa distinto: 0-1/2, 3-4/5, 6-7, 8-9
+    expect(fila('Convenio Multilateral').fechas).toMatchObject({ 2: '2026-10-15', 3: '2026-10-16', 5: '2026-10-16', 7: '2026-10-19', 9: '2026-10-20' });
+    expect(r.body.filas.every((f) => Object.values(f.fechas).every(Boolean))).toBe(true);
+    // Las claves son únicas y no incluyen meses ni años
+    const claves = r.body.filas.map((f) => f.clave);
+    expect(new Set(claves).size).toBe(claves.length);
+    expect(claves.some((c) => /2026|septiembre/.test(c))).toBe(false);
+  });
+
+  const fechasPor = (porDigito) => Object.fromEntries('0123456789'.split('').map((d) => [d, porDigito(d)]));
+  const calendario = (iva) => ({
+    filas: [
+      { seccion: 'NACIONALES', obligacion: 'Impuesto al Valor Agregado', concepto: 'DDJJ - Septiembre/2026', notas: '', clave: 'iva ddjj', titulo: 'Impuesto al Valor Agregado – DDJJ',
+        fechas: fechasPor((d) => (Number(d) < 5 ? iva : '2026-10-21')) },
+      { seccion: 'NACIONALES', obligacion: 'Monotributo', concepto: 'Octubre 2026', notas: '', clave: 'monotributo', titulo: 'Monotributo', fechas: fechasPor(() => '2026-10-20') },
+    ],
+  });
+  let cli;
+
+  it('guarda el calendario, valida y lo ofrece como catálogo', async () => {
+    await user.put('/api/calendarios/2026-13').send(calendario('2026-10-19')).expect(400);
+    await user.put('/api/calendarios/2026-10').send({ filas: [] }).expect(400);
+    const mal = calendario('2026-10-19'); mal.filas[0].fechas['3'] = '2026-02-31';
+    await user.put('/api/calendarios/2026-10').send(mal).expect(400);
+    await user.put('/api/calendarios/2026-10').send(calendario('2026-10-19')).expect(200);
+    expect((await user.get('/api/calendarios').expect(200)).body).toMatchObject([{ periodo: '2026-10', filas: 2 }]);
+    expect((await user.get('/api/calendarios/catalogo').expect(200)).body.map((c) => c.clave)).toEqual(['iva ddjj', 'monotributo']);
+    await user.delete('/api/calendarios/2026-10').expect(403);
+  });
+
+  it('genera vencimientos según obligaciones y terminación del CUIT', async () => {
+    // Cliente cuyo CUIT termina en 6 (>=5) y otro que termina en 0-4
+    const buscar = (condicion) => { for (let n = 2000000000; ; n++) { const c = cuitDe(String(n)); if (c && condicion(Number(c[10]))) return c; } };
+    const a = await user.post('/api/clientes').send({ razonSocial: 'Cal Alto', cuit: buscar((d) => d >= 5), condicionIva: 'RI', estado: 'ACTIVO', obligaciones: ['iva ddjj', 'monotributo'] }).expect(201);
+    const b = await user.post('/api/clientes').send({ razonSocial: 'Cal Bajo', cuit: buscar((d) => d < 5 && d !== 0), condicionIva: 'RI', estado: 'ACTIVO', obligaciones: ['iva ddjj'] }).expect(201);
+    await user.post('/api/clientes').send({ razonSocial: 'Cal Sin Obligaciones', cuit: buscar((d) => d === 0), condicionIva: 'RI', estado: 'ACTIVO' }).expect(201);
+    await user.post('/api/clientes').send({ razonSocial: 'Cal Potencial', estado: 'POTENCIAL', obligaciones: ['iva ddjj'] }).expect(201);
+    cli = { a: a.body.id, b: b.body.id };
+    expect(a.body.obligaciones).toEqual(['iva ddjj', 'monotributo']);
+
+    const r = await user.post('/api/calendarios/2026-10/aplicar').expect(200);
+    expect(r.body).toMatchObject({ clientes: 2, creados: 3, actualizados: 0, sinCambios: 0 });
+    const va = (await user.get(`/api/vencimientos?clienteId=${cli.a}`).expect(200)).body;
+    const vb = (await user.get(`/api/vencimientos?clienteId=${cli.b}`).expect(200)).body;
+    expect(va.map((v) => [v.clave, v.vence]).sort()).toEqual([['iva ddjj', '2026-10-21'], ['monotributo', '2026-10-20']]);
+    expect(vb.map((v) => [v.clave, v.vence])).toEqual([['iva ddjj', '2026-10-19']]);
+    expect(vb[0].origen).toBe('calendario');
+  });
+
+  it('aplicar de nuevo no duplica; actualiza fechas corregidas salvo las ya presentadas', async () => {
+    expect((await user.post('/api/calendarios/2026-10/aplicar').expect(200)).body).toMatchObject({ creados: 0, actualizados: 0, sinCambios: 3 });
+    const vb = (await user.get(`/api/vencimientos?clienteId=${cli.b}`)).body[0];
+    const va = (await user.get(`/api/vencimientos?clienteId=${cli.a}`)).body.find((v) => v.clave === 'iva ddjj');
+    await user.patch(`/api/vencimientos/${va.id}`).send({ estado: 'PRESENTADO' }).expect(200);
+    // ARCA corrige la fecha: el pendiente se actualiza, el presentado no
+    await user.put('/api/calendarios/2026-10').send(calendario('2026-10-22')).expect(200);
+    expect((await user.post('/api/calendarios/2026-10/aplicar').expect(200)).body).toMatchObject({ creados: 0, actualizados: 1, sinCambios: 2 });
+    expect((await user.get(`/api/vencimientos?clienteId=${cli.b}`)).body.find((v) => v.id === vb.id).vence).toBe('2026-10-22');
+    expect((await user.get(`/api/vencimientos?clienteId=${cli.a}`)).body.find((v) => v.id === va.id).vence).toBe('2026-10-21');
+    await admin.delete('/api/calendarios/2026-10').expect(204);
+    await user.post('/api/calendarios/2026-10/aplicar').expect(404);
   });
 });

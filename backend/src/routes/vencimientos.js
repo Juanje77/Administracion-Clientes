@@ -1,7 +1,6 @@
 const router = require('express').Router();
 const { db, aObjeto } = require('../db');
-const { todosLosClientes } = require('../cache');
-const { vencimientoSchema, generarSchema } = require('../validacion');
+const { vencimientoSchema } = require('../validacion');
 const { situacion, mapaClientes, porFecha } = require('../util');
 
 const vencimientos = () => db.collection('vencimientos');
@@ -16,13 +15,6 @@ const salida = (v, clientes) => ({
   situacion: situacion(v.vence, v.estado === 'PRESENTADO'),
 });
 
-// Grupo de terminación de CUIT ("0-1", "2-3", ...) según el último dígito.
-function grupoCuit(cuit) {
-  const digitos = String(cuit || '').replace(/\D/g, '');
-  if (digitos.length !== 11) return null;
-  const d = Number(digitos[10]);
-  return `${d - (d % 2)}-${d - (d % 2) + 1}`;
-}
 const slug = (t) => t.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
 // Sin clienteId solo se listan los pendientes; con clienteId, todos los de ese cliente.
@@ -55,40 +47,6 @@ router.post('/', async (req, res) => {
     throw e;
   }
   res.status(201).json(salida({ id, ...nuevo }, await mapaClientes()));
-});
-
-// Genera el mismo vencimiento para muchos clientes, con la fecha según la terminación del CUIT.
-router.post('/generar', async (req, res) => {
-  const r = generarSchema.safeParse(req.body);
-  if (!r.success) return errorValidacion(res, r.error);
-  const { impuesto, periodo, fechas, etiqueta, incluirInactivos } = r.data;
-
-  let candidatos = (await todosLosClientes()).filter((c) => (incluirInactivos ? c.estado !== 'POTENCIAL' : c.estado === 'ACTIVO'));
-  if (etiqueta) candidatos = candidatos.filter((c) => (c.etiquetas || []).includes(etiqueta.toLowerCase()));
-
-  const sinCuit = [];
-  const nuevos = [];
-  for (const c of candidatos) {
-    const vence = fechas[grupoCuit(c.cuit)];
-    if (!grupoCuit(c.cuit)) sinCuit.push(c.razonSocial);
-    else if (vence) nuevos.push({ cliente: c, vence, id: `${c.id}_${slug(impuesto)}_${periodo}` });
-  }
-
-  const existentes = nuevos.length ? await db.getAll(...nuevos.map((n) => vencimientos().doc(n.id))) : [];
-  const yaExisten = new Set(existentes.filter((d) => d.exists).map((d) => d.id));
-  const aCrear = nuevos.filter((n) => !yaExisten.has(n.id));
-
-  for (let i = 0; i < aCrear.length; i += 400) {
-    const lote = db.batch();
-    for (const n of aCrear.slice(i, i + 400)) {
-      lote.create(vencimientos().doc(n.id), {
-        clienteId: n.cliente.id, impuesto, periodo, vence: n.vence, notas: null,
-        estado: 'PENDIENTE', presentadoEn: null, creadoEn: new Date(),
-      });
-    }
-    await lote.commit();
-  }
-  res.status(201).json({ creados: aCrear.length, yaExistian: yaExisten.size, sinCuit });
 });
 
 router.patch('/:id', async (req, res) => {

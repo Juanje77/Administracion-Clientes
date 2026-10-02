@@ -5,72 +5,12 @@ import { verFecha } from '../fechas';
 import Situacion from '../componentes/Situacion';
 import { avisarAlertas } from '../componentes/TareasCliente';
 
-const GRUPOS = ['0-1', '2-3', '4-5', '6-7', '8-9'];
-const mesActual = () => new Date().toLocaleDateString('en-CA').slice(0, 7);
-
 function Resumen({ titulo, valor, color }) {
   return (
     <div className="rounded-lg border bg-white p-3">
       <p className="text-xs text-slate-500">{titulo}</p>
       <p className={`text-2xl font-semibold ${valor ? color : 'text-slate-400'}`}>{valor}</p>
     </div>
-  );
-}
-
-function GenerarVencimientos({ alTerminar }) {
-  const [abierto, setAbierto] = useState(false);
-  const [f, setF] = useState({ impuesto: '', periodo: mesActual(), etiqueta: '', incluirInactivos: false });
-  const [fechas, setFechas] = useState({});
-  const [etiquetas, setEtiquetas] = useState([]);
-  const [msg, setMsg] = useState(null);
-
-  useEffect(() => { if (abierto) api('/clientes/etiquetas').then(setEtiquetas).catch(() => {}); }, [abierto]);
-
-  async function generar(e) {
-    e.preventDefault();
-    setMsg(null);
-    const fechasLimpias = Object.fromEntries(Object.entries(fechas).filter(([, v]) => v));
-    try {
-      const r = await api('/vencimientos/generar', { metodo: 'POST', cuerpo: { ...f, fechas: fechasLimpias } });
-      setMsg({ ok: true, texto: `Creados: ${r.creados}. Ya existían: ${r.yaExistian}.${r.sinCuit.length ? ` Sin CUIT válido (omitidos): ${r.sinCuit.join(', ')}.` : ''}` });
-      alTerminar();
-    } catch (ex) {
-      setMsg({ ok: false, texto: Object.values(ex.detalles || {}).flat()[0] || ex.message });
-    }
-  }
-
-  if (!abierto) return <button className="btn-sec" onClick={() => setAbierto(true)}>+ Generar vencimientos del mes</button>;
-  return (
-    <form onSubmit={generar} className="space-y-3 rounded-lg border bg-white p-4">
-      <p className="text-sm text-slate-600">
-        Crea el mismo vencimiento para todos los clientes activos. Carga la fecha que indica el calendario
-        impositivo para cada terminación de CUIT; las que dejes vacías se omiten.
-      </p>
-      <div className="grid gap-2 sm:grid-cols-4">
-        <input className="campo" required placeholder="Impuesto" value={f.impuesto} onChange={(e) => setF({ ...f, impuesto: e.target.value })} aria-label="Impuesto" />
-        <input className="campo" required type="month" value={f.periodo} onChange={(e) => setF({ ...f, periodo: e.target.value })} aria-label="Período" />
-        <select className="campo" value={f.etiqueta} onChange={(e) => setF({ ...f, etiqueta: e.target.value })} aria-label="Etiqueta">
-          <option value="">Todos los clientes activos</option>
-          {etiquetas.map((t) => <option key={t.id} value={t.nombre}>Solo etiqueta: {t.nombre}</option>)}
-        </select>
-        <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={f.incluirInactivos} onChange={(e) => setF({ ...f, incluirInactivos: e.target.checked })} /> Incluir inactivos
-        </label>
-      </div>
-      <div className="grid gap-2 sm:grid-cols-5">
-        {GRUPOS.map((g) => (
-          <div key={g}>
-            <label className="etiqueta-label">CUIT termina en {g}</label>
-            <input type="date" className="campo" value={fechas[g] || ''} onChange={(e) => setFechas({ ...fechas, [g]: e.target.value })} />
-          </div>
-        ))}
-      </div>
-      {msg && <p role={msg.ok ? 'status' : 'alert'} className={`text-sm ${msg.ok ? 'text-green-700' : 'text-red-600'}`}>{msg.texto}</p>}
-      <div className="flex gap-2">
-        <button className="btn-primario">Generar</button>
-        <button type="button" className="btn-sec" onClick={() => setAbierto(false)}>Cerrar</button>
-      </div>
-    </form>
   );
 }
 
@@ -131,7 +71,9 @@ export default function Agenda() {
 
       <section className="space-y-3 rounded-lg border bg-white p-4 sm:p-6">
         <h2 className="font-semibold">Vencimientos impositivos pendientes</h2>
-        <GenerarVencimientos alTerminar={cargar} />
+        <p className="text-sm text-slate-600">
+          Los vencimientos del mes se generan desde el <Link className="text-blue-700 hover:underline" to="/calendario">Calendario impositivo</Link>.
+        </p>
         <ul className="divide-y">
           {venc.map((v) => (
             <li key={v.id} className="flex items-center gap-3 py-2 text-sm">

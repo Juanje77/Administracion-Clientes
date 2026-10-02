@@ -4,7 +4,7 @@ import { api, ErrorApi } from '../api';
 
 const VACIO = {
   razonSocial: '', cuit: '', email: '', telefono: '', direccion: '', ciudad: '', notas: '',
-  estado: 'POTENCIAL', tipoPersona: '', condicionIva: '', regimen: '', etiquetas: '',
+  estado: 'POTENCIAL', tipoPersona: '', condicionIva: '', regimen: '', etiquetas: '', obligaciones: [],
 };
 const CONDICIONES_IVA = ['Responsable Inscripto', 'Monotributista', 'Exento', 'Consumidor Final', 'No Responsable'];
 
@@ -24,6 +24,9 @@ export default function ClienteForm() {
   const [f, setF] = useState(VACIO);
   const [errores, setErrores] = useState({});
   const [errorGeneral, setErrorGeneral] = useState('');
+  const [catalogo, setCatalogo] = useState([]);
+
+  useEffect(() => { api('/calendarios/catalogo').then(setCatalogo).catch(() => {}); }, []);
 
   useEffect(() => {
     if (!id) return;
@@ -107,6 +110,25 @@ export default function ClienteForm() {
           <Campo etiqueta="Etiquetas (separadas por coma)">
             <input className="campo" placeholder="monotributo, sueldos" value={f.etiquetas} onChange={set('etiquetas')} />
           </Campo>
+        </div>
+        <div className="sm:col-span-2">
+          <label className="etiqueta-label">Obligaciones impositivas (generan los vencimientos del calendario)</label>
+          {catalogo.length === 0 ? (
+            <p className="text-sm text-slate-500">Carga primero un calendario en la sección <Link className="text-blue-700 hover:underline" to="/calendario">Calendario</Link> para poder marcar las obligaciones.</p>
+          ) : (
+            <div className="max-h-64 overflow-y-auto rounded-md border border-slate-300 p-2">
+              {catalogo.map((o, i) => (
+                <div key={o.clave}>
+                  {o.seccion !== catalogo[i - 1]?.seccion && <p className="mt-1 text-xs font-semibold uppercase text-slate-500">{o.seccion}</p>}
+                  <label className="flex items-center gap-2 py-0.5 text-sm">
+                    <input type="checkbox" checked={f.obligaciones.includes(o.clave)}
+                      onChange={(e) => setF({ ...f, obligaciones: e.target.checked ? [...f.obligaciones, o.clave] : f.obligaciones.filter((x) => x !== o.clave) })} />
+                    {o.titulo}
+                  </label>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
         <div className="sm:col-span-2">
           <Campo etiqueta="Notas">

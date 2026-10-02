@@ -26,12 +26,14 @@ export default function ClienteDetalle() {
   const [interacciones, setInteracciones] = useState([]);
   const [nueva, setNueva] = useState({ tipo: 'NOTA', detalle: '' });
   const [error, setError] = useState('');
+  const [catalogo, setCatalogo] = useState([]);
 
   const cargar = () => {
     api(`/clientes/${id}`).then(setC).catch((e) => setError(e.message));
     api(`/clientes/${id}/interacciones`).then(setInteracciones).catch(() => {});
   };
   useEffect(cargar, [id]);
+  useEffect(() => { api('/calendarios/catalogo').then(setCatalogo).catch(() => {}); }, []);
 
   async function agregar(e) {
     e.preventDefault();
@@ -85,6 +87,12 @@ export default function ClienteDetalle() {
           <Dato titulo="Condición IVA" valor={c.condicionIva} />
           <Dato titulo="Régimen" valor={c.regimen} />
           <Dato titulo="Etiquetas" valor={c.etiquetas.map((t) => t.nombre).join(', ')} />
+          <div className="sm:col-span-2 lg:col-span-3">
+            <dt className="text-xs text-slate-500">Obligaciones impositivas</dt>
+            <dd className="text-sm">
+              {c.obligaciones.length === 0 ? '—' : c.obligaciones.map((k) => catalogo.find((o) => o.clave === k)?.titulo || k).join(' · ')}
+            </dd>
+          </div>
         </dl>
         {c.notas && <p className="mt-4 whitespace-pre-wrap rounded bg-slate-50 p-3 text-sm">{c.notas}</p>}
       </section>

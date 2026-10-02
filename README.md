@@ -56,6 +56,7 @@ cd backend && npm test          # levanta el emulador de Firestore automáticame
 - `cuits/{11 dígitos}`: reserva que garantiza un CUIT único
 - `tareas/{id}`: clienteId, título, `vence` (AAAA-MM-DD), asignadoA, hecha
 - `vencimientos/{clienteId_impuesto_período}`: impuesto, período, `vence`, estado (PENDIENTE/PRESENTADO). El ID evita duplicados.
+- `calendarios/{AAAA-MM}`: filas del calendario mensual con la fecha para cada terminación de CUIT (0–9)
 
 Firestore no busca texto parcial, así que el servidor guarda la lista de clientes en memoria
 (se refresca al escribir y cada 60 s) y filtra/ordena ahí. Es adecuado para hasta unos pocos
@@ -68,11 +69,23 @@ miles de clientes y evita gastar lecturas.
 ## Agenda, tareas y vencimientos (Etapa 2)
 - **Agenda:** pendientes vencidos, de hoy y de los próximos 7 días; el menú muestra un aviso rojo con la cantidad de urgentes.
 - **Tareas:** se crean dentro de cada cliente, con fecha límite y responsable.
-- **Vencimientos impositivos:** se cargan por cliente o se **generan en masa** (Agenda → *Generar vencimientos del mes*)
-  indicando la fecha del calendario de ARCA para cada terminación de CUIT (0-1, 2-3, 4-5, 6-7, 8-9).
-  Las fechas las cargas tú: el sistema no trae calendarios oficiales para no mostrarte datos desactualizados.
+- **Vencimientos impositivos:** se cargan a mano por cliente o, mejor, se generan solos desde el **Calendario** (abajo).
 - "Hoy" se calcula en horario de Argentina; se cambia con la variable `TZ_NEGOCIO` del `.env`.
 - **Mi cuenta:** cada usuario puede cambiar su contraseña (clic en tu nombre, arriba a la derecha).
+
+## Calendario impositivo mensual
+1. **Cada mes:** menú *Calendario* → *Cargar calendario del mes (PDF)* y eliges el PDF "Calendario de vencimientos"
+   (el formato de Errepar). El sistema lo lee solo.
+2. **Revisa** las fechas en pantalla contra el PDF (cada obligación muestra qué terminaciones de CUIT vencen el mismo día;
+   con *Editar* corriges cualquier fecha o agregas filas) y pulsa *Guardar calendario*.
+3. **En cada cliente** marca sus *Obligaciones impositivas* (IVA, Monotributo, Autónomos, IIBB, etc.).
+4. **Aplicar a clientes:** crea el vencimiento de cada cliente activo según el último dígito de su CUIT.
+   Si lo aplicas de nuevo no duplica; si corriges una fecha, se actualizan los vencimientos aún pendientes
+   (los ya presentados no se tocan).
+
+Las obligaciones se identifican sin mes ni año ("IVA – DDJJ"), así lo que marcaste en cada cliente sirve todos los meses.
+Si un PDF no se pudo leer del todo, el sistema avisa qué parte revisar. Los tests usan una copia del PDF en
+`backend/tests/fixtures/` (no se sube a git; sin ese archivo ese test se omite).
 
 ## Hoja de ruta
 3. Honorarios y documentos ·
