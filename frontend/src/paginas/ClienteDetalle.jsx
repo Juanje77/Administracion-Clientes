@@ -6,6 +6,7 @@ import Estado from '../componentes/Estado';
 import TareasCliente from '../componentes/TareasCliente';
 import VencimientosCliente from '../componentes/VencimientosCliente';
 import HonorariosCliente from '../componentes/HonorariosCliente';
+import DocumentosCliente from '../componentes/DocumentosCliente';
 
 const TIPOS = { LLAMADA: 'Llamada', REUNION: 'Reunión', MENSAJE: 'Mensaje', NOTA: 'Nota' };
 const fecha = (d) => new Date(d).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' });
@@ -99,6 +100,7 @@ export default function ClienteDetalle() {
       </section>
 
       <HonorariosCliente clienteId={id} abonoMensual={c.abonoMensual} />
+      <DocumentosCliente clienteId={id} />
       <TareasCliente clienteId={id} />
       <VencimientosCliente clienteId={id} />
 

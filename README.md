@@ -18,11 +18,14 @@ Node.js 20+, una cuenta de Google (Firebase) y, solo para desarrollar/probar, Ja
    `firestore.rules` y publica. Solo el servidor accede a los datos.
 3. **Cuenta de servicio:** *Configuración del proyecto → Cuentas de servicio → Generar nueva clave privada*.
    Guarda el archivo como `backend/cuenta-de-servicio.json` (ya está ignorado por git; **no lo compartas**).
-4. **Configurar el backend:**
+4. **Documentos adjuntos (opcional):** en la consola de Firebase, *Compilación → Storage → Comenzar* (según el plan puede
+   requerir el plan Blaze de pago por uso, que incluye una cuota gratuita). Copia el nombre del *bucket* (ej. `adminclientes-da709.firebasestorage.app`)
+   y en *Storage → Reglas* pega el contenido de `storage.rules` y publica: así nadie accede a los archivos salvo el servidor.
+5. **Configurar el backend:**
    ```bash
    npm install                # en la carpeta raíz: instala backend y frontend
    cd backend
-   cp .env.example .env       # editar FIREBASE_SERVICE_ACCOUNT y JWT_SECRET
+   cp .env.example .env       # editar FIREBASE_SERVICE_ACCOUNT, JWT_SECRET y FIREBASE_STORAGE_BUCKET
    npm run seed -- tu@email.com "TuClaveSegura" "Tu Nombre"   # primer administrador
    ```
 
@@ -54,6 +57,7 @@ estáticos y la API corre como función en `/api/*`.
    |---|---|
    | `JWT_SECRET` | un texto largo y aleatorio (`node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`) |
    | `FIREBASE_SERVICE_ACCOUNT` | el **contenido completo** del archivo `.json` de la cuenta de servicio, pegado tal cual |
+   | `FIREBASE_STORAGE_BUCKET` | nombre del bucket de Storage (solo para los documentos adjuntos) |
    | `TZ_NEGOCIO` | opcional; por defecto `America/Argentina/Buenos_Aires` |
 3. *Deploy*. Cada `git push` a la rama de producción vuelve a desplegar solo.
 4. El primer administrador se crea una sola vez desde tu PC con `npm run seed` (apunta a tu Firestore real).
@@ -66,7 +70,7 @@ Cosas a tener en cuenta:
 - **Lecturas de Firestore:** cada pantalla usa pocas lecturas (la lista de clientes se valida con un único
   documento-contador y las alertas usan consultas de conteo). El plan gratuito de Firestore permite 50.000 lecturas por día.
 - **Límite de intentos de login:** en Vercel se cuenta por instancia de la función, así que es un freno parcial.
-- **Tamaño de archivos:** Vercel limita el cuerpo de una petición a 4,5 MB (suficiente para los PDF de calendario).
+- **Tamaño de archivos:** Vercel limita el cuerpo de una petición a 4,5 MB, por eso los documentos adjuntos tienen un máximo de 4 MB (suficiente para PDF y fotos comunes).
 
 ## Tests
 ```bash
@@ -81,6 +85,7 @@ npm test                        # levanta el emulador de Firestore automáticame
 - `tareas/{id}`: clienteId, título, `vence` (AAAA-MM-DD), asignadoA, hecha
 - `vencimientos/{clienteId_impuesto_período}`: impuesto, período, `vence`, estado (PENDIENTE/PRESENTADO). El ID evita duplicados.
 - `honorarios/{id}`: clienteId, período, concepto, monto, pagado, saldo; y `pagos/{id}` (honorarioId, clienteId, fecha, monto, medio, nota)
+- `documentos/{id}`: clienteId, nombre, categoría, tipo, tamaño, ruta en Storage, quién lo subió
 - `calendarios/{AAAA-MM}`: filas del calendario mensual con la fecha para cada terminación de CUIT (0–9)
 
 Firestore no busca texto parcial, así que el servidor guarda la lista de clientes en memoria y filtra/ordena ahí.
@@ -99,6 +104,14 @@ solo lo pendiente sin leer el historial.
 - **Vencimientos impositivos:** se cargan a mano por cliente o, mejor, se generan solos desde el **Calendario** (abajo).
 - "Hoy" se calcula en horario de Argentina; se cambia con la variable `TZ_NEGOCIO` del `.env`.
 - **Mi cuenta:** cada usuario puede cambiar su contraseña (clic en tu nombre, arriba a la derecha).
+
+## Documentos adjuntos
+En la ficha de cada cliente: subir contratos, presupuestos, facturas, constancias o balances (PDF, imágenes, Word, Excel, CSV o texto; máx. 4 MB).
+- Los archivos se guardan en Firebase Storage y **solo se descargan con sesión iniciada**: no hay enlaces públicos.
+- Al subir se verifica el contenido real (un `.exe` o una página web renombrada a `.pdf` se rechazan) y el nombre original se limpia; en el
+  bucket el archivo se guarda con un identificador, no con su nombre.
+- PDF e imágenes se pueden *Ver* en el navegador; el resto se descarga. Borra quien lo subió o un administrador.
+- Sin `FIREBASE_STORAGE_BUCKET` el resto del sistema funciona y la sección Documentos avisa qué falta.
 
 ## Inicio (dashboard) y exportaciones
 - **Inicio** muestra, para el mes elegido: lo cobrado (cifra principal) y lo facturado, la deuda total, clientes activos y nuevos,

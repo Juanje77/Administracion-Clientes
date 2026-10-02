@@ -1,5 +1,8 @@
 const path = require('path');
 const fs = require('fs');
+// Hace que los errores lanzados dentro de rutas asíncronas lleguen al manejador de errores de abajo
+// (Express 4 no lo hace solo: sin esto la petición queda colgada y el proceso puede caerse).
+require('express-async-errors');
 const express = require('express');
 const helmet = require('helmet');
 const cookieParser = require('cookie-parser');
@@ -24,6 +27,7 @@ app.use('/api/importacion', requiereLogin, require('./routes/importacion'));
 app.use('/api/honorarios', requiereLogin, require('./routes/honorarios'));
 app.use('/api/dashboard', requiereLogin, require('./routes/dashboard'));
 app.use('/api/exportar', requiereLogin, require('./routes/exportar'));
+app.use('/api/documentos', requiereLogin, require('./routes/documentos'));
 
 // En producción el mismo servidor entrega el frontend compilado.
 const dist = path.join(__dirname, '../../frontend/dist');
@@ -34,6 +38,10 @@ if (fs.existsSync(dist)) {
 
 // Manejo de errores genérico: no filtra detalles internos.
 app.use((err, _req, res, _next) => {
+  if (err.type === 'entity.too.large') return res.status(413).json({ error: 'El archivo es demasiado grande (máximo 4 MB)' });
+  if (err.type === 'entity.parse.failed') return res.status(400).json({ error: 'Los datos enviados no son válidos' });
+  // Errores de configuración con mensaje seguro (ej. Storage sin configurar)
+  if (err.configuracion) return res.status(503).json({ error: err.message });
   console.error(err);
   res.status(500).json({ error: 'Error interno del servidor' });
 });

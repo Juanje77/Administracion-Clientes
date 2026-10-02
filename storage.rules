@@ -1,0 +1,10 @@
+rules_version = '2';
+// Solo el servidor (Admin SDK, que ignora estas reglas) accede a los archivos.
+// Cualquier acceso directo desde un navegador o app queda bloqueado.
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

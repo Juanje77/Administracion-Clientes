@@ -640,3 +640,109 @@ describe('dashboard y exportaciones', () => {
     await request(app).get('/api/dashboard').expect(401);
   });
 });
+
+// ---------- Documentos adjuntos (Firebase Storage) ----------
+describe('documentos adjuntos', () => {
+  const pdf = Buffer.concat([Buffer.from('%PDF-1.4\n'), Buffer.from('contenido de prueba '.repeat(50))]);
+  const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(64, 1)]);
+  const docx = Buffer.concat([Buffer.from([0x50, 0x4b, 0x03, 0x04]), Buffer.alloc(100, 2)]);
+  let cliente, otro, doc;
+
+  const subir = (agente, cuerpo, { nombre = 'contrato.pdf', categoria = 'CONTRATO', clienteId = cliente } = {}) =>
+    agente.post(`/api/documentos?clienteId=${clienteId}&categoria=${categoria}&nombre=${encodeURIComponent(nombre)}`).set('Content-Type', 'application/octet-stream').send(cuerpo);
+  const bajar = (agente, id, extra = '') => agente.get(`/api/documentos/${id}/descargar${extra}`).buffer(true).parse((res, cb) => { const d = []; res.on('data', (x) => d.push(x)); res.on('end', () => cb(null, Buffer.concat(d))); });
+
+  beforeAll(async () => {
+    for (const col of ['clientes', 'cuits', 'documentos']) await db.recursiveDelete(db.collection(col));
+    await invalidar();
+    cliente = (await admin.post('/api/clientes').send({ razonSocial: 'Cliente Documentos' }).expect(201)).body.id;
+    otro = await login('luis@t.com', 'clave12345');
+  });
+
+  it('sube un PDF y lo lista con sus datos', async () => {
+    const r = (await subir(user, pdf, { nombre: 'Contrato de honorarios 2026.pdf' }).expect(201)).body;
+    expect(r).toMatchObject({ nombre: 'Contrato de honorarios 2026.pdf', categoria: 'CONTRATO', tipo: 'application/pdf', tamano: pdf.length, subidoPorNombre: 'Ana', clienteId: cliente });
+    expect(r.ruta).toMatch(new RegExp(`^clientes/${cliente}/[A-Za-z0-9]+\\.pdf$`)); // el nombre original no va en la ruta
+    doc = r;
+    const lista = (await user.get(`/api/documentos?clienteId=${cliente}`).expect(200)).body;
+    expect(lista.map((d) => d.id)).toEqual([r.id]);
+    await user.get('/api/documentos').expect(400);
+  });
+
+  it('descarga el mismo contenido, como adjunto o a la vista solo si es seguro', async () => {
+    const adjunto = await bajar(user, doc.id).expect(200);
+    expect(adjunto.body.equals(pdf)).toBe(true);
+    expect(adjunto.headers['content-type']).toBe('application/pdf');
+    expect(adjunto.headers['content-disposition']).toMatch(/^attachment; filename\*=UTF-8''Contrato%20de%20honorarios%202026\.pdf$/);
+    expect(adjunto.headers['cache-control']).toMatch(/no-store/);
+    expect((await bajar(user, doc.id, '?ver=1').expect(200)).headers['content-disposition']).toMatch(/^inline/);
+    const word = (await subir(user, docx, { nombre: 'Nota.docx', categoria: 'OTRO' }).expect(201)).body;
+    expect((await bajar(user, word.id, '?ver=1').expect(200)).headers['content-disposition']).toMatch(/^attachment/); // un .docx nunca se muestra a la vista
+    await bajar(user, 'no-existe').expect(404);
+    await request(app).get(`/api/documentos/${doc.id}/descargar`).expect(401);
+    doc.word = word.id;
+  });
+
+  it('rechaza tipos no permitidos, contenido que no coincide y archivos vacíos o enormes', async () => {
+    await subir(user, Buffer.from('MZ ejecutable'), { nombre: 'virus.exe' }).expect(400);
+    await subir(user, Buffer.from('<html><script>alert(1)</script></html>'), { nombre: 'pagina.html' }).expect(400);
+    await subir(user, Buffer.from('<html>soy una pagina</html>'), { nombre: 'falso.pdf' }).expect(400); // no empieza con %PDF-
+    await subir(user, png, { nombre: 'foto.pdf' }).expect(400);
+    await subir(user, Buffer.alloc(0), { nombre: 'vacio.pdf' }).expect(400);
+    await subir(user, Buffer.concat([pdf, Buffer.alloc(5 * 1024 * 1024)])).expect(413);
+    await subir(user, pdf, { nombre: '' }).expect(400);
+    await subir(user, pdf, { clienteId: 'no-existe' }).expect(404);
+    await subir(user, png, { nombre: 'foto.png', categoria: 'INVENTADA' }).expect(201); // categoría desconocida -> Otro
+    expect((await user.get(`/api/documentos?clienteId=${cliente}`).expect(200)).body.find((d) => d.nombre === 'foto.png').categoria).toBe('OTRO');
+  });
+
+  it('limpia nombres con rutas o caracteres raros', async () => {
+    const r = (await subir(user, pdf, { nombre: '../../etc/passwd<>.pdf' }).expect(201)).body;
+    expect(r.nombre).toBe('passwd.pdf');
+    expect(r.ruta).not.toContain('passwd');
+  });
+
+  it('avisa con claridad si Storage no está configurado', async () => {
+    const guardado = process.env.FIREBASE_STORAGE_BUCKET;
+    delete process.env.FIREBASE_STORAGE_BUCKET;
+    try {
+      const r = await subir(user, pdf).expect(503);
+      expect(r.body.error).toContain('FIREBASE_STORAGE_BUCKET');
+    } finally {
+      process.env.FIREBASE_STORAGE_BUCKET = guardado;
+    }
+  });
+
+  it('solo quien lo subió o un administrador borra un documento', async () => {
+    await otro.delete(`/api/documentos/${doc.id}`).expect(403);
+    await user.delete(`/api/documentos/${doc.word}`).expect(204);
+    await bajar(user, doc.word).expect(404);
+    await admin.delete(`/api/documentos/${doc.id}`).expect(204);
+    await bajar(user, doc.id).expect(404);
+    await admin.delete(`/api/documentos/${doc.id}`).expect(404);
+  });
+
+  it('al borrar un cliente definitivamente se borran sus documentos y archivos', async () => {
+    const d = (await subir(user, pdf, { nombre: 'huerfano.pdf' }).expect(201)).body;
+    await admin.delete(`/api/clientes/${cliente}?definitivo=true`).expect(204);
+    expect((await db.collection('documentos').where('clienteId', '==', cliente).get()).empty).toBe(true);
+    const [existe] = await require('../src/db').bucket().file(d.ruta).exists();
+    expect(existe).toBe(false);
+  });
+});
+
+// ---------- Robustez: un error dentro de una ruta asíncrona responde 500, no cuelga ----------
+describe('errores inesperados', () => {
+  it('responde 500 con un mensaje genérico y sin filtrar detalles', async () => {
+    const { db: base } = require('../src/db');
+    const original = base.collection.bind(base);
+    base.collection = (nombre) => { if (nombre === 'tareas') throw new Error('detalle interno secreto'); return original(nombre); };
+    try {
+      const r = await user.get('/api/tareas').expect(500);
+      expect(r.body).toEqual({ error: 'Error interno del servidor' });
+    } finally {
+      base.collection = original;
+    }
+    await user.get('/api/tareas').expect(200); // el servidor sigue funcionando
+  });
+});

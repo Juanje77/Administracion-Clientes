@@ -125,6 +125,8 @@ const pagoSchema = z.object({
   nota: opcional(z.string().trim().max(300)),
 });
 
+const CATEGORIAS_DOC = ['CONTRATO', 'PRESUPUESTO', 'FACTURA', 'CONSTANCIA', 'BALANCE', 'OTRO'];
+
 const passwordSchema = z.object({
   actual: z.string().min(1, 'Ingresa tu contraseña actual'),
   nueva: z.string().min(8, 'Mínimo 8 caracteres'),
@@ -133,5 +135,5 @@ const passwordSchema = z.object({
 module.exports = {
   cuitValido, clienteSchema, interaccionSchema, usuarioSchema,
   tareaSchema, tareaCambiosSchema, vencimientoSchema, calendarioSchema, passwordSchema, periodo,
-  honorarioSchema, honorarioCambiosSchema, pagoSchema,
+  honorarioSchema, honorarioCambiosSchema, pagoSchema, CATEGORIAS_DOC,
 };

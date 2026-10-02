@@ -6,6 +6,7 @@
 const fs = require('fs');
 const { initializeApp, getApps, cert } = require('firebase-admin/app');
 const { getFirestore } = require('firebase-admin/firestore');
+const { getStorage } = require('firebase-admin/storage');
 
 // Error de configuración: su mensaje es seguro de mostrar (nunca incluye el contenido de la clave).
 function errorConfig(mensaje) {
@@ -17,7 +18,7 @@ function errorConfig(mensaje) {
 function iniciar() {
   if (getApps().length) return;
   if (process.env.FIRESTORE_EMULATOR_HOST) {
-    initializeApp({ projectId: process.env.FIREBASE_PROJECT_ID || 'demo-clientes' });
+    initializeApp({ projectId: process.env.FIREBASE_PROJECT_ID || 'demo-clientes', storageBucket: process.env.FIREBASE_STORAGE_BUCKET });
     return;
   }
   const origen = (process.env.FIREBASE_SERVICE_ACCOUNT || '').trim();
@@ -39,7 +40,7 @@ function iniciar() {
     throw errorConfig('FIREBASE_SERVICE_ACCOUNT no es un JSON válido: pega el contenido completo del archivo descargado de Firebase');
   }
   try {
-    initializeApp({ credential: cert(cuenta) });
+    initializeApp({ credential: cert(cuenta), storageBucket: process.env.FIREBASE_STORAGE_BUCKET });
   } catch {
     throw errorConfig('La clave de FIREBASE_SERVICE_ACCOUNT no es válida: descarga una nueva desde Firebase y pégala completa');
   }
@@ -57,4 +58,12 @@ function aObjeto(doc) {
   return { id: doc.id, ...datos };
 }
 
-module.exports = { db, aObjeto };
+// Bucket de Firebase Storage (documentos adjuntos). Es opcional: sin configurar, solo fallan los documentos.
+function bucket() {
+  if (!process.env.FIREBASE_STORAGE_BUCKET) {
+    throw errorConfig('Los documentos no están configurados: falta la variable de entorno FIREBASE_STORAGE_BUCKET (nombre del bucket de Firebase Storage)');
+  }
+  return getStorage().bucket();
+}
+
+module.exports = { db, aObjeto, bucket };
