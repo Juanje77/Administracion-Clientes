@@ -20,33 +20,57 @@ Node.js 20+, una cuenta de Google (Firebase) y, solo para desarrollar/probar, Ja
    Guarda el archivo como `backend/cuenta-de-servicio.json` (ya está ignorado por git; **no lo compartas**).
 4. **Configurar el backend:**
    ```bash
+   npm install                # en la carpeta raíz: instala backend y frontend
    cd backend
-   cp .env.example .env     # editar FIREBASE_SERVICE_ACCOUNT y JWT_SECRET
-   npm install
+   cp .env.example .env       # editar FIREBASE_SERVICE_ACCOUNT y JWT_SECRET
    npm run seed -- tu@email.com "TuClaveSegura" "Tu Nombre"   # primer administrador
    ```
-5. **Instalar el frontend:** `cd ../frontend && npm install`
 
 ## Ejecutar en desarrollo
 Dos terminales:
 ```bash
-cd backend  && npm run dev      # API en http://localhost:3001 (usa tu Firestore real)
-cd frontend && npm run dev      # App en http://localhost:5173
+npm run dev:api                 # API en http://localhost:3001 (usa tu Firestore real)
+npm run dev:web                 # App en http://localhost:5173
 ```
 Para desarrollar **sin tocar datos reales**, usa el emulador local:
 `npm run dev:emu` (en `backend/`) y crea el admin con
 `FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 npm run seed -- ...`.
 
-## Producción
+## Producción en un servidor propio (alternativa a Vercel)
 ```bash
-cd frontend && npm run build    # genera frontend/dist
-cd ../backend && NODE_ENV=production npm start
+npm run build                   # genera frontend/dist
+cd backend && NODE_ENV=production npm start
 ```
 El servidor entrega la API y el frontend compilado en un mismo puerto.
 
+## Despliegue en Vercel
+El proyecto ya trae la configuración (`vercel.json` y `api/index.js`): el frontend se publica como archivos
+estáticos y la API corre como función en `/api/*`.
+
+1. Sube el código a GitHub (ya está) y en https://vercel.com → *Add New → Project* importa el repositorio.
+   Deja el *Root Directory* en la raíz; Vercel lee `vercel.json` (no hace falta elegir framework).
+2. En *Environment Variables* agrega:
+   | Variable | Valor |
+   |---|---|
+   | `JWT_SECRET` | un texto largo y aleatorio (`node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`) |
+   | `FIREBASE_SERVICE_ACCOUNT` | el **contenido completo** del archivo `.json` de la cuenta de servicio, pegado tal cual |
+   | `TZ_NEGOCIO` | opcional; por defecto `America/Argentina/Buenos_Aires` |
+3. *Deploy*. Cada `git push` a la rama de producción vuelve a desplegar solo.
+4. El primer administrador se crea una sola vez desde tu PC con `npm run seed` (apunta a tu Firestore real).
+5. Recomendado: en *Settings → Functions* elige la región más cercana a tu base de Firestore
+   (por ejemplo São Paulo `gru1` si la base está en `southamerica-east1`).
+
+Cosas a tener en cuenta:
+- **Plan de Vercel:** el plan gratuito (Hobby) es solo para uso personal y no comercial; para el estudio
+  corresponde un plan de pago. Revisa las condiciones vigentes en vercel.com/pricing.
+- **Lecturas de Firestore:** cada pantalla usa pocas lecturas (la lista de clientes se valida con un único
+  documento-contador y las alertas usan consultas de conteo). El plan gratuito de Firestore permite 50.000 lecturas por día.
+- **Límite de intentos de login:** en Vercel se cuenta por instancia de la función, así que es un freno parcial.
+- **Tamaño de archivos:** Vercel limita el cuerpo de una petición a 4,5 MB (suficiente para los PDF de calendario).
+
 ## Tests
 ```bash
-cd backend && npm test          # levanta el emulador de Firestore automáticamente
+npm test                        # levanta el emulador de Firestore automáticamente (requiere Java 11+)
 ```
 
 ## Modelo de datos (Firestore)
@@ -58,9 +82,11 @@ cd backend && npm test          # levanta el emulador de Firestore automáticame
 - `vencimientos/{clienteId_impuesto_período}`: impuesto, período, `vence`, estado (PENDIENTE/PRESENTADO). El ID evita duplicados.
 - `calendarios/{AAAA-MM}`: filas del calendario mensual con la fecha para cada terminación de CUIT (0–9)
 
-Firestore no busca texto parcial, así que el servidor guarda la lista de clientes en memoria
-(se refresca al escribir y cada 60 s) y filtra/ordena ahí. Es adecuado para hasta unos pocos
-miles de clientes y evita gastar lecturas.
+Firestore no busca texto parcial, así que el servidor guarda la lista de clientes en memoria y filtra/ordena ahí.
+Cada instancia valida su copia con el documento `meta/clientes` (contador de versión que sube en cada cambio),
+por eso funciona también con varias instancias a la vez. Es adecuado para hasta unos pocos miles de clientes.
+Las tareas y vencimientos pendientes llevan un campo auxiliar (`alerta`) que desaparece al cerrarlos, para consultar
+solo lo pendiente sin leer el historial.
 
 ## Roles
 - **Administrador:** gestiona usuarios y puede eliminar clientes definitivamente.
