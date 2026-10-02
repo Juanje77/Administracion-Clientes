@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../api';
 import { verFecha } from '../fechas';
 import Situacion from '../componentes/Situacion';
-import { avisarAlertas } from '../componentes/TareasCliente';
+import { FilaTarea, FormularioTarea, avisarAlertas, textoAviso, useEquipo } from '../componentes/Tareas';
 
 function Resumen({ titulo, valor, color }) {
   return (
@@ -17,16 +17,21 @@ function Resumen({ titulo, valor, color }) {
 export default function Agenda() {
   const [tareas, setTareas] = useState([]);
   const [venc, setVenc] = useState([]);
-  const [soloMias, setSoloMias] = useState(true);
+  const equipo = useEquipo();
+  const [responsable, setResponsable] = useState('yo'); // 'yo' | 'todos' | id de una persona
   const [dias, setDias] = useState(7);
+  const [creando, setCreando] = useState(false);
+  const [editando, setEditando] = useState(null);
+  const [msg, setMsg] = useState('');
   const [error, setError] = useState('');
 
   const cargar = () => {
-    api(`/tareas?dias=${dias}${soloMias ? '&asignado=yo' : ''}`).then(setTareas).catch((e) => setError(e.message));
+    api(`/tareas?dias=${dias}${responsable === 'todos' ? '' : `&asignado=${responsable}`}`).then(setTareas).catch((e) => setError(e.message));
     api(`/vencimientos?dias=${dias}`).then(setVenc).catch((e) => setError(e.message));
     avisarAlertas();
   };
-  useEffect(cargar, [soloMias, dias]);
+  useEffect(cargar, [responsable, dias]);
+  const guardado = (r) => { setCreando(false); setEditando(null); setMsg(textoAviso(r)); cargar(); };
 
   const completar = async (t) => { await api(`/tareas/${t.id}`, { metodo: 'PATCH', cuerpo: { hecha: true } }); cargar(); };
   const presentar = async (v) => { await api(`/vencimientos/${v.id}`, { metodo: 'PATCH', cuerpo: { estado: 'PRESENTADO' } }); cargar(); };
@@ -55,28 +60,29 @@ export default function Agenda() {
         <Resumen titulo="Vencen pronto" valor={cuenta(venc, 'HOY') + cuenta(venc, 'PROXIMA')} color="text-amber-600" />
       </div>
 
-      <section className="rounded-lg border bg-white p-4 sm:p-6">
-        <div className="mb-3 flex items-center justify-between">
+      <section className="space-y-3 rounded-lg border bg-white p-4 sm:p-6">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="font-semibold">Tareas pendientes</h2>
-          <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={soloMias} onChange={(e) => setSoloMias(e.target.checked)} /> Solo las mías
-          </label>
+          <div className="flex flex-wrap items-center gap-2">
+            <select className="campo w-44" value={responsable} onChange={(e) => setResponsable(e.target.value)} aria-label="Ver tareas de">
+              <option value="yo">Mis tareas</option>
+              <option value="todos">Todo el equipo</option>
+              {equipo.map((p) => <option key={p.id} value={p.id}>Tareas de {p.nombre}</option>)}
+            </select>
+            {!creando && <button className="btn-primario" onClick={() => { setCreando(true); setEditando(null); setMsg(''); }}>+ Nueva tarea</button>}
+          </div>
         </div>
+        {creando && <FormularioTarea equipo={equipo} alGuardar={guardado} alCancelar={() => setCreando(false)} />}
+        {msg && <p role="status" className="text-sm text-green-700">{msg}</p>}
         <ul className="divide-y">
           {tareas.map((t) => (
-            <li key={t.id} className="flex items-center gap-3 py-2 text-sm">
-              <input type="checkbox" onChange={() => completar(t)} aria-label={`Completar ${t.titulo}`} className="h-4 w-4" />
-              <div className="flex-1">
-                {t.titulo}
-                <span className="block text-xs text-slate-500">
-                  <Link className="text-blue-700 hover:underline" to={`/clientes/${t.clienteId}`}>{t.clienteNombre}</Link>
-                  {' · '}{verFecha(t.vence)}{!soloMias && ` · ${t.asignadoNombre || 'Sin asignar'}`}
-                </span>
-              </div>
-              <Situacion valor={t.situacion} />
+            <li key={t.id} className="space-y-2 py-2">
+              <FilaTarea tarea={t} mostrarResponsable={responsable !== 'yo'} alCompletar={completar}
+                alEditar={() => { setEditando(editando === t.id ? null : t.id); setCreando(false); setMsg(''); }} />
+              {editando === t.id && <FormularioTarea tarea={t} equipo={equipo} alGuardar={guardado} alCancelar={() => setEditando(null)} />}
             </li>
           ))}
-          {tareas.length === 0 && <li className="py-4 text-center text-sm text-slate-500">No tienes tareas pendientes en este período. 🎉</li>}
+          {tareas.length === 0 && <li className="py-4 text-center text-sm text-slate-500">No hay tareas pendientes en este período. 🎉</li>}
         </ul>
       </section>
 

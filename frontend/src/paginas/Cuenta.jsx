@@ -43,7 +43,7 @@ export default function Cuenta() {
         <h2 className="font-semibold">Avisos por email</h2>
         <label className="flex items-start gap-2 text-sm">
           <input type="checkbox" className="mt-0.5" checked={avisos} onChange={cambiarAvisos} />
-          <span>Recibir cada mañana (de lunes a viernes) un resumen con mis tareas, los vencimientos y, si soy administrador, los deudores. Solo se envía si hay algo pendiente.</span>
+          <span>Recibir cada mañana (de lunes a viernes) un resumen con mis tareas, los vencimientos y, si soy administrador, los deudores (solo si hay algo pendiente), y un email cuando alguien me asigna una tarea.</span>
         </label>
         {prefMsg && <p role="alert" className="text-sm text-red-600">{prefMsg}</p>}
       </section>

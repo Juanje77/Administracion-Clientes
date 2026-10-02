@@ -101,7 +101,7 @@ export default function ClienteDetalle() {
 
       <HonorariosCliente clienteId={id} abonoMensual={c.abonoMensual} />
       <DocumentosCliente clienteId={id} />
-      <TareasCliente clienteId={id} />
+      <TareasCliente clienteId={id} clienteNombre={c.razonSocial} />
       <VencimientosCliente clienteId={id} />
 
       <section className="rounded-lg border bg-white p-4 sm:p-6">

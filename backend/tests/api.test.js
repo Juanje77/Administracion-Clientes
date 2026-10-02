@@ -1087,3 +1087,148 @@ describe('totales mensuales del Inicio', () => {
     }
   });
 });
+
+// ---------- Tareas internas, reasignación y aviso por email ----------
+describe('tareas internas, reasignación y aviso por email', () => {
+  const correo = require('../src/correo/transporte');
+  const A = require('../src/servicios/avisos');
+  const enviados = [];
+  let fallar = false;
+  const u = {};
+  const para = (to) => enviados.filter((m) => m.to === to);
+  const crear = (cuerpo) => admin.post('/api/tareas').send({ titulo: 'Tarea', vence: hoy(), ...cuerpo });
+  const listaDe = async (agente, quien) => (await agente.get(`/api/tareas?asignado=${quien}&dias=30`).expect(200)).body.map((t) => t.titulo);
+
+  beforeAll(async () => {
+    correo.usarTransporteDePrueba({ sendMail: async (m) => { if (fallar) throw new Error('SMTP caído'); enviados.push(m); } });
+    for (const col of ['tareas', 'envios', 'clientes', 'cuits']) await db.recursiveDelete(db.collection(col));
+    await invalidar();
+    const usuarios = (await admin.get('/api/usuarios').expect(200)).body;
+    u.admin = usuarios.find((x) => x.email === 'admin@t.com').id;
+    u.ana = usuarios.find((x) => x.email === 'ana@t.com').id;
+    u.luis = usuarios.find((x) => x.email === 'luis@t.com').id;
+    const baja = (await admin.post('/api/usuarios').send({ nombre: 'Baja', email: 'baja@t.com', password: 'clave12345' }).expect(201)).body;
+    await admin.patch(`/api/usuarios/${baja.id}`).send({ activo: false }).expect(200);
+    u.baja = baja.id;
+    u.cliente = (await admin.post('/api/clientes').send({ razonSocial: 'Cliente de las Tareas' }).expect(201)).body.id;
+    await luis_(false); // Luis empieza con los avisos apagados
+  });
+  afterAll(() => correo.usarTransporteDePrueba(null));
+  const luis_ = async (avisos) => { const l = await login('luis@t.com', 'clave12345'); await l.patch('/api/auth/preferencias').send({ avisos }).expect(200); };
+
+  it('el equipo disponible para asignar lista solo a las personas activas', async () => {
+    const r = (await user.get('/api/usuarios/equipo').expect(200)).body;
+    expect(r.map((x) => x.id).sort()).toEqual([u.admin, u.ana, u.luis].sort());
+    expect(r.every((x) => Object.keys(x).sort().join() === 'id,nombre')).toBe(true); // sin datos sensibles
+    await request(app).get('/api/usuarios/equipo').expect(401);
+  });
+
+  it('crea tareas internas, sin cliente', async () => {
+    for (const cuerpo of [{ titulo: 'Renovar el seguro' }, { titulo: 'Renovar la matrícula', clienteId: '' }]) {
+      const t = (await crear(cuerpo).expect(201)).body;
+      expect(t).toMatchObject({ clienteId: null, clienteNombre: null, asignadoNombre: 'Admin', aviso: null });
+    }
+    expect(await listaDe(admin, 'yo')).toEqual(expect.arrayContaining(['Renovar el seguro', 'Renovar la matrícula']));
+  });
+
+  it('asigna a otra persona, que la ve en su agenda y recibe un email', async () => {
+    const t = (await crear({ titulo: 'Presentar IVA de <b>Pérez</b>', clienteId: u.cliente, asignadoA: u.ana, descripcion: 'Con el <script>x</script> de compras' }).expect(201)).body;
+    expect(t).toMatchObject({ asignadoA: u.ana, asignadoNombre: 'Ana', clienteNombre: 'Cliente de las Tareas', aviso: 'enviado' });
+    expect(await listaDe(user, 'yo')).toContain('Presentar IVA de <b>Pérez</b>');
+    expect(await listaDe(admin, u.ana)).toContain('Presentar IVA de <b>Pérez</b>');
+    expect(await listaDe(admin, 'yo')).not.toContain('Presentar IVA de <b>Pérez</b>');
+    const m = para('ana@t.com')[0];
+    expect(m.subject).toBe('Nueva tarea: Presentar IVA de <b>Pérez</b>');
+    expect(m.text).toContain('Admin te asignó una tarea');
+    expect(m.text).toContain('Cliente: Cliente de las Tareas');
+    expect(m.html).toContain('Presentar IVA de &lt;b&gt;Pérez&lt;/b&gt;'); // el HTML va escapado
+    expect(m.html).not.toContain('<script>');
+    expect(m.html).toContain('Admin te asignó una tarea');
+    u.tarea = t.id;
+  });
+
+  it('rechaza responsables o clientes que no existen o están desactivados', async () => {
+    expect((await crear({ asignadoA: 'no-existe' }).expect(400)).body.detalles.asignadoA).toBeDefined();
+    expect((await crear({ asignadoA: u.baja }).expect(400)).body.detalles.asignadoA[0]).toMatch(/desactivada/);
+    expect((await crear({ clienteId: 'no-existe' }).expect(400)).body.detalles.clienteId).toBeDefined();
+    await crear({ titulo: 'x' }).expect(400);
+    await crear({ vence: '2026-02-31' }).expect(400);
+    await admin.patch(`/api/tareas/${u.tarea}`).send({ asignadoA: u.baja }).expect(400);
+  });
+
+  it('reasigna: pasa a la agenda del nuevo responsable y avisa solo a esa persona', async () => {
+    const antes = enviados.length;
+    const r = (await admin.patch(`/api/tareas/${u.tarea}`).send({ asignadoA: u.luis }).expect(200)).body;
+    expect(r).toMatchObject({ asignadoA: u.luis, asignadoNombre: 'Luis', aviso: 'desactivado' }); // Luis tiene los avisos apagados
+    expect(enviados).toHaveLength(antes);
+    expect(await listaDe(admin, u.luis)).toContain('Presentar IVA de <b>Pérez</b>');
+    expect(await listaDe(admin, u.ana)).not.toContain('Presentar IVA de <b>Pérez</b>');
+    await luis_(true);
+    const otra = (await admin.patch(`/api/tareas/${u.tarea}`).send({ asignadoA: u.ana }).expect(200)).body;
+    expect(otra.aviso).toBe('enviado');
+    expect(para('ana@t.com')).toHaveLength(2); // la original y esta reasignación
+  });
+
+  it('editar otros datos no vuelve a avisar, y se puede desvincular o cambiar el cliente', async () => {
+    const antes = enviados.length;
+    const r = (await user.patch(`/api/tareas/${u.tarea}`).send({ titulo: 'IVA de Pérez (corregido)', descripcion: 'Nueva nota', vence: sumarDias(hoy(), 5) }).expect(200)).body;
+    expect(r).toMatchObject({ titulo: 'IVA de Pérez (corregido)', descripcion: 'Nueva nota', vence: sumarDias(hoy(), 5), asignadoNombre: 'Ana', aviso: null });
+    await admin.patch(`/api/tareas/${u.tarea}`).send({ asignadoA: u.ana }).expect(200); // mismo responsable
+    expect((await admin.patch(`/api/tareas/${u.tarea}`).send({ clienteId: null }).expect(200)).body).toMatchObject({ clienteId: null, clienteNombre: null });
+    expect((await admin.patch(`/api/tareas/${u.tarea}`).send({ clienteId: u.cliente }).expect(200)).body.clienteNombre).toBe('Cliente de las Tareas');
+    expect(enviados).toHaveLength(antes);
+    await admin.patch(`/api/tareas/${u.tarea}`).send({ vence: '2026-13-01' }).expect(400);
+    await admin.patch(`/api/tareas/${u.tarea}`).send({ clienteId: 'no-existe' }).expect(400);
+    await admin.patch('/api/tareas/no-existe').send({ titulo: 'xx' }).expect(404);
+  });
+
+  it('rechaza fechas imposibles (mes 13, día 0, 31 de abril) sin romper el servidor', async () => {
+    for (const mala of ['2026-13-01', '2026-00-10', '2026-04-31', '2026-10-00', '26-1-1', 'mañana']) {
+      expect((await crear({ vence: mala }).expect(400)).body.detalles.vence).toBeDefined();
+    }
+    await admin.post('/api/vencimientos').send({ clienteId: u.cliente, impuesto: 'IVA', periodo: '2026-10', vence: '2026-13-45' }).expect(400);
+  });
+
+  it('asignarse una tarea a uno mismo no manda email', async () => {
+    const antes = enviados.length;
+    expect((await user.post('/api/tareas').send({ titulo: 'Mi tarea', vence: hoy(), asignadoA: u.ana }).expect(201)).body.aviso).toBeNull();
+    expect(enviados).toHaveLength(antes);
+  });
+
+  it('si el correo no está configurado o falla, la tarea se crea igual y se informa', async () => {
+    fallar = true;
+    const falla = (await crear({ titulo: 'Con SMTP caído', asignadoA: u.ana }).expect(201)).body;
+    expect(falla.aviso).toBe('error');
+    expect((await admin.get(`/api/tareas?asignado=${u.ana}&dias=30`)).body.some((t) => t.id === falla.id)).toBe(true);
+    fallar = false;
+    correo.usarTransporteDePrueba(null);
+    const guardado = { u: process.env.SMTP_USER, p: process.env.SMTP_PASS };
+    delete process.env.SMTP_USER; delete process.env.SMTP_PASS;
+    try {
+      expect((await crear({ titulo: 'Sin correo', asignadoA: u.ana }).expect(201)).body.aviso).toBe('sin-correo');
+    } finally {
+      if (guardado.u) process.env.SMTP_USER = guardado.u;
+      if (guardado.p) process.env.SMTP_PASS = guardado.p;
+      correo.usarTransporteDePrueba({ sendMail: async (m) => { enviados.push(m); } });
+    }
+  });
+
+  it('el aviso queda en el historial y el resumen diario rotula las tareas internas', async () => {
+    const h = await A.historial();
+    expect(h.some((x) => x.tipo === 'tarea-asignada' && x.estado === 'enviado' && x.to === 'ana@t.com')).toBe(true);
+    expect(h.some((x) => x.tipo === 'tarea-asignada' && x.estado === 'error')).toBe(true);
+    await crear({ titulo: 'Interna para el resumen', asignadoA: u.ana }).expect(201);
+    const plan = await A.planificar({});
+    const m = plan.mensajes.find((x) => x.to === 'ana@t.com');
+    expect(m.text).toContain('Interna para el resumen (Tarea interna');
+  });
+
+  it('al borrar un cliente se borran sus tareas, pero no las internas', async () => {
+    const c = (await admin.post('/api/clientes').send({ razonSocial: 'Cliente a Borrar' }).expect(201)).body.id;
+    await crear({ titulo: 'Ligada al cliente', clienteId: c }).expect(201);
+    await admin.delete(`/api/clientes/${c}?definitivo=true`).expect(204);
+    const mias = await listaDe(admin, 'yo');
+    expect(mias).not.toContain('Ligada al cliente');
+    expect(mias).toContain('Renovar el seguro');
+  });
+});

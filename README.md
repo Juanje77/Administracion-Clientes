@@ -106,7 +106,10 @@ solo lo pendiente sin leer el historial.
 
 ## Agenda, tareas y vencimientos (Etapa 2)
 - **Agenda:** pendientes vencidos, de hoy y de los próximos 7 días; el menú muestra un aviso rojo con la cantidad de urgentes.
-- **Tareas:** se crean dentro de cada cliente, con fecha límite y responsable.
+- **Tareas:** se crean desde la **Agenda** (*+ Nueva tarea*) o dentro de la ficha de un cliente. Cada tarea tiene **un responsable** (cualquier persona activa del equipo),
+  fecha límite y un detalle opcional. Pueden ser **internas** (sin cliente, ej. "Renovar el seguro"). Se pueden **editar y reasignar** en cualquier momento; en la Agenda se ven
+  las tuyas, las de todo el equipo o las de una persona. Cuando asignas una tarea a otra persona le llega un **email** (si el correo está configurado y no lo desactivó en *Mi cuenta*);
+  editar el título o la fecha no vuelve a enviar nada, y asignártela a ti mismo tampoco.
 - **Vencimientos impositivos:** se cargan a mano por cliente o, mejor, se generan solos desde el **Calendario** (abajo).
 - "Hoy" se calcula en horario de Argentina; se cambia con la variable `TZ_NEGOCIO` del `.env`.
 - **Mi cuenta:** cada usuario puede cambiar su contraseña (clic en tu nombre, arriba a la derecha).

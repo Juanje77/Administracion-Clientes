@@ -68,20 +68,20 @@ const usuarioSchema = z.object({
 const fecha = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, 'Fecha inválida (AAAA-MM-DD)')
-  .refine((s) => new Date(`${s}T00:00:00Z`).toISOString().slice(0, 10) === s, 'Fecha inválida');
+  .refine((s) => {
+    const d = new Date(`${s}T00:00:00Z`);
+    return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s; // mes 13, día 00, etc. dan fecha inválida (no un error)
+  }, 'Fecha inválida');
 const periodo = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'Período inválido (AAAA-MM)');
 
 const tareaSchema = z.object({
-  clienteId: z.string().min(1, 'Elige un cliente'),
-  titulo: z.string().trim().min(2, 'El título es obligatorio'),
-  descripcion: opcional(z.string().trim()),
+  clienteId: opcional(z.string().min(1)), // vacío = tarea interna del estudio (sin cliente)
+  titulo: z.string().trim().min(2, 'El título es obligatorio').max(200),
+  descripcion: opcional(z.string().trim().max(2000)),
   vence: fecha,
   asignadoA: opcional(z.string().min(1)),
 });
-const tareaCambiosSchema = tareaSchema
-  .omit({ clienteId: true })
-  .partial()
-  .extend({ hecha: z.boolean().optional() });
+const tareaCambiosSchema = tareaSchema.partial().extend({ hecha: z.boolean().optional() });
 
 const vencimientoSchema = z.object({
   clienteId: z.string().min(1, 'Elige un cliente'),

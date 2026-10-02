@@ -70,6 +70,22 @@ function recordatorioVencimientos({ cliente, estudio, items }) {
   return { html, text, subject: `Vencimientos próximos - ${estudio}` };
 }
 
+// Aviso a quien recibe una tarea asignada.
+function tareaAsignada({ nombre, quien, titulo, cliente, vence, descripcion, estudio, url }) {
+  const filas = [
+    ['Tarea', esc(titulo)],
+    ['Cliente', cliente ? esc(cliente) : 'Tarea interna del estudio'],
+    ['Vence', fecha(vence)],
+    ...(descripcion ? [['Detalle', `<span style="white-space:pre-line">${esc(descripcion)}</span>`]] : []),
+  ].map(([k, v]) => `<tr><td style="padding:4px 12px 4px 0;color:#64748b;vertical-align:top">${k}</td><td style="padding:4px 0"><strong>${v}</strong></td></tr>`).join('');
+  const html = MARCO(`${esc(quien)} te asignó una tarea`, `<p style="font-size:14px;margin:0 0 8px">Hola ${esc((nombre || '').split(' ')[0])},</p>
+<table style="font-size:14px;border-collapse:collapse">${filas}</table>${boton(url && `${url}/agenda`, 'Ver mi agenda')}`,
+    `Aviso automático de ${esc(estudio)}. Puedes desactivar los avisos en <em>Mi cuenta</em>.`);
+  const text = [`Hola ${(nombre || '').split(' ')[0]},`, `${quien} te asignó una tarea:`, `  Tarea: ${titulo}`, `  Cliente: ${cliente || 'Tarea interna del estudio'}`,
+    `  Vence: ${fecha(vence)}`, descripcion ? `  Detalle: ${descripcion}` : '', url ? `\n${url}/agenda` : ''].filter(Boolean).join('\n');
+  return { html, text, subject: `Nueva tarea: ${titulo}` };
+}
+
 function prueba({ estudio }) {
   return {
     subject: `Prueba de correo - ${estudio}`,
@@ -78,4 +94,4 @@ function prueba({ estudio }) {
   };
 }
 
-module.exports = { resumenEquipo, recordatorioDeuda, recordatorioVencimientos, prueba, esc, pesos, fecha };
+module.exports = { resumenEquipo, recordatorioDeuda, recordatorioVencimientos, tareaAsignada, prueba, esc, pesos, fecha };

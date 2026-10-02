@@ -84,7 +84,7 @@ async function planificar({ hoy: h = hoyReal() } = {}) {
     let deuda = null;
     for (const u of usuarios.docs.map(aObjeto)) {
       if (u.avisos === false || !email.safeParse(u.email).success) continue;
-      const mias = tareas.filter((t) => t.asignadoA === u.id).map((t) => ({ ...t, clienteNombre: nombres.get(t.clienteId) ?? '(cliente eliminado)' }));
+      const mias = tareas.filter((t) => t.asignadoA === u.id).map((t) => ({ ...t, clienteNombre: t.clienteId ? nombres.get(t.clienteId) ?? '(cliente eliminado)' : 'Tarea interna' }));
       const t = {
         vencidas: mias.filter((x) => x.vence < h),
         hoy: mias.filter((x) => x.vence === h),
