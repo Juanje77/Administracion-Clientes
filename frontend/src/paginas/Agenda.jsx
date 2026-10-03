@@ -89,8 +89,8 @@ export default function Agenda() {
         </p>
         <ul className="divide-y">
           {venc.map((v) => (
-            <li key={v.id} className="flex items-center gap-3 py-2 text-sm">
-              <div className="flex-1">
+            <li key={v.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 py-3 text-sm">
+              <div className="min-w-0 flex-1 basis-48">
                 {v.impuesto} <span className="text-machine">· {v.periodo}</span>
                 <span className="block text-xs text-machine">
                   <Link className="enlace" to={`/clientes/${v.clienteId}`}>{v.clienteNombre}</Link>
@@ -98,7 +98,7 @@ export default function Agenda() {
                 </span>
               </div>
               <Situacion valor={v.situacion} />
-              <button className="btn-sec btn-sm" onClick={() => presentar(v)}>Presentado</button>
+              <button className="btn-sec btn-sm min-h-[40px]" onClick={() => presentar(v)}>Presentado</button>
             </li>
           ))}
           {venc.length === 0 && <li className="py-4 text-center text-sm text-machine">No hay vencimientos pendientes en este período.</li>}

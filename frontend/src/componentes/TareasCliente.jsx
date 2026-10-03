@@ -36,7 +36,7 @@ export default function TareasCliente({ clienteId, clienteNombre }) {
         {tareas.map((t) => (
           <li key={t.id} className="space-y-2 py-2">
             <FilaTarea tarea={t} mostrarCliente={false} alCompletar={alternar} alEditar={() => { setEditando(editando === t.id ? null : t.id); setCreando(false); setMsg(''); }}
-              extra={<button className="text-xs enlace-tenue" onClick={() => borrar(t)}>Borrar</button>} />
+              extra={<button className="py-2 text-xs enlace-tenue" onClick={() => borrar(t)}>Borrar</button>} />
             {editando === t.id && <FormularioTarea tarea={t} clienteFijo={{ id: clienteId, nombre: clienteNombre }} equipo={equipo} alGuardar={guardado} alCancelar={() => setEditando(null)} />}
           </li>
         ))}

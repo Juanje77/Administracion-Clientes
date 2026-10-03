@@ -144,20 +144,30 @@ export function FormularioTarea({ tarea, clienteFijo, equipo, alGuardar, alCance
 
 // Una tarea en una lista: casilla, título, detalle, cliente (o "Tarea interna"), fecha y responsable.
 export function FilaTarea({ tarea: t, mostrarCliente = true, mostrarResponsable = true, alCompletar, alEditar, extra }) {
+  const accion = t.hecha ? 'Reabrir' : 'Completar';
   return (
-    <div className="flex items-start gap-3 text-sm">
-      <input type="checkbox" checked={t.hecha} onChange={() => alCompletar(t)} aria-label={`${t.hecha ? 'Reabrir' : 'Completar'} ${t.titulo}`} className="mt-1 h-4 w-4" />
-      <div className={`min-w-0 flex-1 ${t.hecha ? 'text-machine line-through' : ''}`}>
-        <p className="break-words">{t.titulo}{t.repite && t.repite !== 'NINGUNA' && <span className="tecnica ml-2 text-machine">↻ {{ SEMANAL: 'Semanal', MENSUAL: 'Mensual', ANUAL: 'Anual' }[t.repite]}</span>}</p>
-        {t.descripcion && <p className="whitespace-pre-line break-words text-xs text-machine">{t.descripcion}</p>}
-        <p className="text-xs text-machine">
-          {mostrarCliente && (t.clienteId ? <><Link className="enlace" to={`/clientes/${t.clienteId}`}>{t.clienteNombre}</Link> · </> : <>Tarea interna · </>)}
-          {verFecha(t.vence)}{mostrarResponsable && ` · ${t.asignadoNombre || 'Sin asignar'}`}
-        </p>
+    <div className="flex items-start gap-1 text-sm">
+      {/* zona táctil de 44 px (celular): la casilla en sí es grande y todo el recuadro responde al toque */}
+      <label className="flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center">
+        <input type="checkbox" checked={t.hecha} onChange={() => alCompletar(t)} aria-label={`${accion} ${t.titulo}`} className="h-6 w-6 cursor-pointer" />
+      </label>
+      <div className="min-w-0 flex-1 py-2.5">
+        <div className={t.hecha ? 'text-machine line-through' : ''}>
+          <p className="break-words">{t.titulo}{t.repite && t.repite !== 'NINGUNA' && <span className="tecnica ml-2 text-machine">↻ {{ SEMANAL: 'Semanal', MENSUAL: 'Mensual', ANUAL: 'Anual' }[t.repite]}</span>}</p>
+          {t.descripcion && <p className="whitespace-pre-line break-words text-xs text-machine">{t.descripcion}</p>}
+          <p className="text-xs text-machine">
+            {mostrarCliente && (t.clienteId ? <><Link className="enlace" to={`/clientes/${t.clienteId}`}>{t.clienteNombre}</Link> · </> : <>Tarea interna · </>)}
+            {verFecha(t.vence)}{mostrarResponsable && ` · ${t.asignadoNombre || 'Sin asignar'}`}
+          </p>
+        </div>
+        <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1">
+          <Situacion valor={t.situacion} />
+          {/* en el celular, un botón explícito además de la casilla */}
+          {!t.hecha && <button className="btn-sec btn-sm min-h-[40px] sm:hidden" onClick={() => alCompletar(t)}>Completar</button>}
+          {alEditar && <button className="py-2 text-xs enlace" onClick={() => alEditar(t)}>Editar</button>}
+          {extra}
+        </div>
       </div>
-      <Situacion valor={t.situacion} />
-      {alEditar && <button className="text-xs enlace" onClick={() => alEditar(t)}>Editar</button>}
-      {extra}
     </div>
   );
 }
