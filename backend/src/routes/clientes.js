@@ -6,6 +6,7 @@ const { invalidar } = require('../cache');
 const { requiereAdmin } = require('../middleware/auth');
 const { clienteSchema, interaccionSchema } = require('../validacion');
 const { filtrarYOrdenar } = require('../servicios/clientes');
+const { sincronizarCliente } = require('../servicios/calendario');
 const { clientesVisibles, puedeVerCliente } = require('../servicios/acceso');
 
 const clientes = () => db.collection('clientes');
@@ -100,7 +101,8 @@ router.post('/', async (req, res) => {
     throw e;
   }
   await invalidar();
-  res.status(201).json(salida({ id: ref.id, ...nuevo }, req.usuario));
+  const calendario = await sincronizarCliente({ id: ref.id, ...nuevo });
+  res.status(201).json({ ...salida({ id: ref.id, ...nuevo }, req.usuario), calendario });
 });
 
 router.get('/:id', async (req, res) => {
@@ -143,7 +145,8 @@ router.put('/:id', async (req, res) => {
     });
     if (!resultado) return res.status(404).json({ error: 'Cliente no encontrado' });
     await invalidar();
-    res.json(salida({ id: ref.id, ...resultado }, req.usuario));
+    const calendario = await sincronizarCliente({ id: ref.id, ...resultado });
+    res.json({ ...salida({ id: ref.id, ...resultado }, req.usuario), calendario });
   } catch (e) {
     if (e instanceof CuitDuplicado) return res.status(409).json({ error: 'Ya existe un cliente con ese CUIT' });
     throw e;

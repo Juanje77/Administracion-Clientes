@@ -253,7 +253,8 @@ describe('calendario impositivo', () => {
     expect(a.body.obligaciones).toEqual(['iva ddjj', 'monotributo']);
 
     const r = await user.post('/api/calendarios/2026-10/aplicar').expect(200);
-    expect(r.body).toMatchObject({ clientes: 2, creados: 3, actualizados: 0, sinCambios: 0 });
+    expect(r.body.clientes).toBe(2);
+    expect(r.body.creados + r.body.sinCambios).toBe(3); // los que aún no vencieron ya se generaron al crear el cliente
     const va = (await user.get(`/api/vencimientos?clienteId=${cli.a}`).expect(200)).body;
     const vb = (await user.get(`/api/vencimientos?clienteId=${cli.b}`).expect(200)).body;
     expect(va.map((v) => [v.clave, v.vence]).sort()).toEqual([['iva ddjj', '2026-10-21'], ['monotributo', '2026-10-20']]);
@@ -1546,5 +1547,29 @@ describe('permisos por cliente', () => {
     await admin.patch(`/api/usuarios/${u.rita}`).send({ accesoClientes: 'ASIGNADOS' }).expect(200);
     await rita.get(`/api/clientes/${u.b}`).expect(404);
     expect((await admin.get('/api/usuarios').expect(200)).body.find((x) => x.id === u.rita)).toMatchObject({ todosLosClientes: false });
+  });
+});
+
+describe('obligaciones del cliente -> Agenda al crearlo', () => {
+  it('al crear o editar un cliente sus vencimientos aparecen según el calendario cargado y su CUIT', async () => {
+    const fechas = Object.fromEntries('0123456789'.split('').map((d) => [d, `2099-01-${10 + Number(d)}`]));
+    const filas = [{ seccion: 'NACIONALES', obligacion: 'Ganancias', concepto: 'Anticipo', notas: '', clave: 'ganancias anticipo', titulo: 'Ganancias – Anticipo', fechas }];
+    await admin.put('/api/calendarios/2099-01').send({ filas }).expect(200);
+    try {
+      let cuit; for (let n = 2100000000; !cuit; n++) { const c = cuitDe(String(n)); if (c && c[10] === '4') cuit = c; }
+      const c = (await user.post('/api/clientes').send({ razonSocial: 'Auto Agenda', cuit, condicionIva: 'RI', estado: 'ACTIVO', obligaciones: ['ganancias anticipo'] }).expect(201)).body;
+      expect(c.calendario.creados).toBe(1);
+      const v = (await user.get(`/api/vencimientos?clienteId=${c.id}`).expect(200)).body;
+      expect(v).toHaveLength(1);
+      expect(v[0]).toMatchObject({ vence: '2099-01-14', estado: 'PENDIENTE', origen: 'calendario' });
+      // editar sin cambios no duplica
+      const e = (await user.put(`/api/clientes/${c.id}`).send({ razonSocial: 'Auto Agenda', cuit, condicionIva: 'RI', estado: 'ACTIVO', obligaciones: ['ganancias anticipo'], etiquetas: [] }).expect(200)).body;
+      expect(e.calendario.creados).toBe(0);
+      // un cliente que se le agrega la obligación al editar
+      const d = (await user.post('/api/clientes').send({ razonSocial: 'Auto Agenda 2', estado: 'POTENCIAL' }).expect(201)).body;
+      expect(d.calendario.creados).toBe(0);
+    } finally {
+      await admin.delete('/api/calendarios/2099-01');
+    }
   });
 });

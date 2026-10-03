@@ -7,10 +7,9 @@ const { todosLosClientes } = require('../cache');
 const { requiereAdmin } = require('../middleware/auth');
 const { calendarioSchema, periodo: periodoSchema } = require('../validacion');
 const { leerCalendarioPdf } = require('../calendario/leerPdf');
-const { alertaVencimiento } = require('../util');
+const { aplicarFilas } = require('../servicios/calendario');
 
 const calendarios = () => db.collection('calendarios');
-const slug = (t) => t.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
 function periodoValido(req, res) {
   const r = periodoSchema.safeParse(req.params.periodo);
@@ -85,41 +84,7 @@ router.post('/:periodo/aplicar', async (req, res) => {
   const { filas } = doc.data();
   const periodo = req.params.periodo;
 
-  const clientes = (await todosLosClientes()).filter((c) => c.estado === 'ACTIVO' && (c.obligaciones || []).length);
-  const sinCuit = new Set();
-  const sinFecha = new Set();
-  const previstos = [];
-  for (const c of clientes) {
-    const digitos = String(c.cuit || '').replace(/\D/g, '');
-    for (const fila of filas.filter((f) => c.obligaciones.includes(f.clave))) {
-      if (digitos.length !== 11) { sinCuit.add(c.razonSocial); continue; }
-      const vence = fila.fechas[digitos[10]];
-      if (!vence) { sinFecha.add(`${c.razonSocial} – ${fila.titulo}`); continue; }
-      previstos.push({
-        id: `${c.id}_${slug(fila.clave)}_${periodo}`,
-        datos: { clienteId: c.id, impuesto: [fila.obligacion, fila.concepto].filter(Boolean).join(' – '), periodo, vence, notas: null, origen: 'calendario', clave: fila.clave },
-      });
-    }
-  }
-
-  const refs = previstos.map((p) => db.collection('vencimientos').doc(p.id));
-  const existentes = refs.length ? await db.getAll(...refs) : [];
-  let creados = 0, actualizados = 0, sinCambios = 0;
-  for (let i = 0; i < previstos.length; i += 400) {
-    const lote = db.batch();
-    previstos.slice(i, i + 400).forEach((p, j) => {
-      const previo = existentes[i + j];
-      if (!previo.exists) {
-        lote.create(refs[i + j], { ...p.datos, estado: 'PENDIENTE', presentadoEn: null, creadoEn: new Date(), ...alertaVencimiento({ ...p.datos, estado: 'PENDIENTE' }) });
-        creados++;
-      } else if (previo.data().estado === 'PENDIENTE' && previo.data().vence !== p.datos.vence) {
-        lote.update(refs[i + j], { vence: p.datos.vence, impuesto: p.datos.impuesto, avisadoEn: null, ...alertaVencimiento({ vence: p.datos.vence, estado: 'PENDIENTE' }) }); // fecha nueva: se vuelve a avisar
-        actualizados++;
-      } else sinCambios++;
-    });
-    await lote.commit();
-  }
-  res.json({ clientes: clientes.length, creados, actualizados, sinCambios, sinCuit: [...sinCuit], sinFecha: [...sinFecha] });
+  res.json(await aplicarFilas(periodo, filas, await todosLosClientes()));
 });
 
 module.exports = router;

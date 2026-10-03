@@ -214,6 +214,8 @@ Solo administradores: *Clientes → Importar desde Excel*.
    Sin estado en la planilla: queda *Activo* si tiene CUIT y condición IVA, y *Potencial* si no. Importar dos veces el mismo archivo no duplica.
 
 ## Calendario impositivo mensual
+
+Al **crear o editar un cliente** activo con obligaciones marcadas (y CUIT), sus vencimientos pasan solos a la Agenda con la fecha que le corresponde según el último dígito del CUIT, para todos los calendarios ya cargados (se omiten fechas ya pasadas). "Aplicar a los clientes" sigue sirviendo al cargar un calendario nuevo.
 1. **Cada mes:** menú *Calendario* → *Cargar calendario del mes (PDF)* y eliges el PDF "Calendario de vencimientos"
    (el formato de Errepar). El sistema lo lee solo.
 2. **Revisa** las fechas en pantalla contra el PDF (cada obligación muestra qué terminaciones de CUIT vencen el mismo día;
