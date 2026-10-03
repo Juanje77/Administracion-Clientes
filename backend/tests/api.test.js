@@ -1621,3 +1621,29 @@ describe('cierre de balance y Ganancias Sociedades', () => {
     }
   });
 });
+
+describe('anticipos de personas jurídicas según el cierre', () => {
+  it('cada sociedad recibe el anticipo que le corresponde a su cierre (y ninguno si no figura)', async () => {
+    const fechas = Object.fromEntries('0123456789'.split('').map((d) => [d, '2099-09-20']));
+    const notas = 'Cierre de ejercicio, Nº de anticipo y porcentaje aplicable: 6/2099 (Nº 11, solo aplicable a Fondo Cooperativo); 8/2099 (Nº 9); 9/2099 (Nº 8); 12/2099 (Nº 5)';
+    const filas = [{ seccion: 'IMPUESTOS', obligacion: 'Anticipos', concepto: 'Personas jurídicas', notas, clave: 'anticipos personas juridicas', titulo: 'Anticipos – Personas jurídicas', fechas }];
+    await admin.put('/api/calendarios/2099-09').send({ filas }).expect(200);
+    try {
+      const alta = async (nombre, mes, semilla) => {
+        let cuit; for (let i = 3100000000 + semilla; !cuit; i++) cuit = cuitDe(String(i));
+        return (await user.post('/api/clientes').send({ razonSocial: nombre, cuit, condicionIva: 'RI', estado: 'ACTIVO', tipoPersona: 'JURIDICA', cierreMes: mes, obligaciones: ['anticipos personas juridicas'] }).expect(201)).body.id;
+      };
+      const ago = await alta('Anticipo Agosto', 8, 1000);
+      const dic = await alta('Anticipo Diciembre', 12, 2000);
+      const mar = await alta('Anticipo Marzo', 3, 3000); // marzo no figura: no paga anticipo en septiembre
+      const fondo = await alta('Anticipo Cooperativo', 6, 4000); // solo aplicable a Fondo Cooperativo: no se genera
+      const de = async (id) => (await user.get(`/api/vencimientos?clienteId=${id}`).expect(200)).body;
+      expect((await de(ago)).map((v) => v.impuesto)).toEqual(['Anticipos – Personas jurídicas (anticipo Nº 9)']);
+      expect((await de(dic)).map((v) => v.impuesto)).toEqual(['Anticipos – Personas jurídicas (anticipo Nº 5)']);
+      expect(await de(mar)).toHaveLength(0);
+      expect(await de(fondo)).toHaveLength(0);
+    } finally {
+      await admin.delete('/api/calendarios/2099-09');
+    }
+  });
+});
