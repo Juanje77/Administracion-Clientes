@@ -4,7 +4,7 @@ const { todosLosClientes } = require('../cache');
 const { tareaSchema, tareaCambiosSchema } = require('../validacion');
 const { idsVisibles, visiblePara, puedeVerCliente, exigirCliente, comoAcceso } = require('../servicios/acceso');
 const { avisarAsignacion } = require('../servicios/asignaciones');
-const { hoy, sumarDias, situacion, mapaClientes, mapaUsuarios, porFecha, alertaTarea, diasAgenda, LIMITE_AGENDA } = require('../util');
+const { hoy, sumarDias, situacion, mapaClientes, mapaUsuarios, porFecha, alertaTarea, siguienteFecha, diasAgenda, LIMITE_AGENDA } = require('../util');
 
 const tareas = () => db.collection('tareas');
 
@@ -79,6 +79,7 @@ router.post('/', async (req, res) => {
     clienteId: r.data.clienteId ?? null,
     descripcion: r.data.descripcion ?? null,
     asignadoA,
+    repite: r.data.repite ?? 'NINGUNA',
     hecha: false,
     hechaEn: null,
     creadoPor: req.usuario.id,
@@ -111,6 +112,21 @@ router.patch('/:id', async (req, res) => {
     cambios.hecha = hecha;
     cambios.hechaEn = hecha ? new Date() : null;
   }
+  // Recurrente: al completarla (por primera vez) nace la siguiente, con la fecha corrida y la misma persona.
+  const repite = cambios.repite ?? actual.data().repite ?? 'NINGUNA';
+  let siguiente = null;
+  if (hecha === true && !actual.data().hecha && !actual.data().siguienteId && repite !== 'NINGUNA') {
+    const base = { ...actual.data(), ...cambios };
+    const proxima = {
+      clienteId: base.clienteId ?? null, titulo: base.titulo, descripcion: base.descripcion ?? null, vence: siguienteFecha(base.vence, repite),
+      asignadoA: base.asignadoA, repite, hecha: false, hechaEn: null, creadoPor: base.creadoPor, creadoEn: new Date(), origenId: ref.id,
+    };
+    Object.assign(proxima, alertaTarea(proxima));
+    const nuevaRef = tareas().doc();
+    await nuevaRef.set(proxima);
+    cambios.siguienteId = nuevaRef.id;
+    siguiente = { id: nuevaRef.id, vence: proxima.vence };
+  }
   Object.assign(cambios, alertaTarea({ ...actual.data(), ...cambios }));
   await ref.update(cambios);
 
@@ -121,7 +137,7 @@ router.patch('/:id', async (req, res) => {
   const aviso = cambioResponsable
     ? await avisarAsignacion({ tarea, asignado, actor: await usuarioActual(req.usuario.id), clienteNombre: await nombreCliente(tarea.clienteId) })
     : null;
-  res.json({ ...salida(tarea, clientes, usuarios), aviso });
+  res.json({ ...salida(tarea, clientes, usuarios), aviso, siguiente });
 });
 
 router.delete('/:id', async (req, res) => {

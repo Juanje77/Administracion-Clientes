@@ -383,7 +383,7 @@ describe('importación de clientes', () => {
   it('detecta columnas, normaliza y clasifica sin guardar nada', async () => {
     const r = (await subir(admin, archivo).expect(200)).body;
     expect(r.mapeo).toMatchObject({ 0: 'razonSocial', 1: 'cuit', 2: 'email', 3: 'telefono', 4: 'ciudad', 5: 'condicionIva', 6: 'estado', 7: 'etiquetas', 8: 'notas' });
-    expect(r.resumen).toEqual({ total: 8, ok: 2, advertencias: 4, rechazadas: 2 });
+    expect(r.resumen).toEqual({ total: 8, ok: 1, advertencias: 5, rechazadas: 2 });
     const fila = (nombre) => r.filas.find((f) => f.nombre === nombre);
     expect(fila('Ana Gómez').datos).toMatchObject({
       cuit: `${cuitFisica.slice(0, 2)}-${cuitFisica.slice(2, 10)}-${cuitFisica[10]}`, email: 'ana@x.com', tipoPersona: 'FISICA',
@@ -402,7 +402,7 @@ describe('importación de clientes', () => {
 
   it('confirma la importación y volver a importar no duplica', async () => {
     const r = (await subir(admin, archivo, '?confirmar=1').expect(201)).body;
-    expect(r).toMatchObject({ creados: 6, fallidos: 0, rechazadas: 2, conAdvertencias: 4 });
+    expect(r).toMatchObject({ creados: 6, fallidos: 0, rechazadas: 2, conAdvertencias: 5 });
     const lista = (await admin.get('/api/clientes?porPagina=50').expect(200)).body;
     expect(lista.total).toBe(6);
     expect(lista.datos.find((c) => c.razonSocial === 'Ana Gómez').etiquetas.map((e) => e.nombre)).toEqual(['mensual', 'sueldos']);
@@ -1570,6 +1570,54 @@ describe('obligaciones del cliente -> Agenda al crearlo', () => {
       expect(d.calendario.creados).toBe(0);
     } finally {
       await admin.delete('/api/calendarios/2099-01');
+    }
+  });
+});
+
+describe('tareas recurrentes', () => {
+  it('al completar una recurrente nace la siguiente; las de una vez no', async () => {
+    const mensual = (await user.post('/api/tareas').send({ titulo: 'Liquidar sueldos', vence: '2026-01-31', repite: 'MENSUAL' }).expect(201)).body;
+    expect(mensual.repite).toBe('MENSUAL');
+    const r = (await user.patch(`/api/tareas/${mensual.id}`).send({ hecha: true }).expect(200)).body;
+    expect(r.siguiente.vence).toBe('2026-02-28'); // 31 de enero -> fin de febrero
+    // completarla de nuevo (reabrir y cerrar) no duplica
+    await user.patch(`/api/tareas/${mensual.id}`).send({ hecha: false }).expect(200);
+    expect((await user.patch(`/api/tareas/${mensual.id}`).send({ hecha: true }).expect(200)).body.siguiente).toBeNull();
+    const pendientes = (await user.get('/api/tareas?asignado=yo&dias=3650').expect(200)).body.filter((t) => t.titulo === 'Liquidar sueldos' && !t.hecha);
+    expect(pendientes).toHaveLength(1);
+    expect(pendientes[0]).toMatchObject({ vence: '2026-02-28', repite: 'MENSUAL' });
+
+    const unica = (await user.post('/api/tareas').send({ titulo: 'Solo este mes', vence: '2026-03-10' }).expect(201)).body;
+    expect(unica.repite).toBe('NINGUNA');
+    expect((await user.patch(`/api/tareas/${unica.id}`).send({ hecha: true }).expect(200)).body.siguiente).toBeNull();
+    await user.post('/api/tareas').send({ titulo: 'x y', vence: '2026-03-10', repite: 'DIARIA' }).expect(400);
+  });
+});
+
+describe('cierre de balance y Ganancias Sociedades', () => {
+  it('es obligatorio para sociedades activas y define qué fila del calendario le toca', async () => {
+    const jur = (n) => { for (let i = 3000000000 + n; ; i++) { const c = cuitDe(String(i)); if (c) return c; } };
+    const base = { razonSocial: 'Soc Cierre SA', cuit: jur(111), condicionIva: 'RI', estado: 'ACTIVO', tipoPersona: 'JURIDICA', obligaciones: ['ganancias sociedades ddjj cierre'] };
+    const e = await user.post('/api/clientes').send(base).expect(400);
+    expect(e.body.detalles.cierreMes).toBeTruthy();
+    await user.post('/api/clientes').send({ ...base, cierreMes: 13 }).expect(400);
+
+    const fechas = (f) => Object.fromEntries('0123456789'.split('').map((d) => [d, f]));
+    const fila = (mes, f) => ({ seccion: 'IMPUESTOS', obligacion: 'Ganancias Sociedades', concepto: `DDJJ - Cierre: ${mes}/2099`, notas: '', clave: 'ganancias sociedades ddjj cierre', titulo: 'Ganancias Sociedades – DDJJ', fechas: fechas(f) });
+    await admin.put('/api/calendarios/2099-05').send({ filas: [fila('Diciembre', '2099-05-12')] }).expect(200);
+    await admin.put('/api/calendarios/2099-06').send({ filas: [fila('Enero', '2099-06-15')] }).expect(200);
+    try {
+      const dic = (await user.post('/api/clientes').send({ ...base, cierreMes: 12 }).expect(201)).body;
+      const v = (await user.get(`/api/vencimientos?clienteId=${dic.id}`).expect(200)).body;
+      expect(v.map((x) => x.vence)).toEqual(['2099-05-12']); // cierre en diciembre -> vence en mayo, no en junio
+      const otra = (await user.post('/api/clientes').send({ ...base, razonSocial: 'Soc Enero SA', cuit: jur(222), cierreMes: 1 }).expect(201)).body;
+      expect((await user.get(`/api/vencimientos?clienteId=${otra.id}`).expect(200)).body.map((x) => x.vence)).toEqual(['2099-06-15']);
+      // sociedad inactiva/potencial sin cierre: se puede guardar, pero al aplicar el calendario se avisa
+      const sin = (await admin.post('/api/clientes').send({ razonSocial: 'Soc Sin Cierre', estado: 'POTENCIAL', tipoPersona: 'JURIDICA' }).expect(201)).body;
+      expect(sin.cierreMes ?? null).toBeNull();
+    } finally {
+      await admin.delete('/api/calendarios/2099-05');
+      await admin.delete('/api/calendarios/2099-06');
     }
   });
 });

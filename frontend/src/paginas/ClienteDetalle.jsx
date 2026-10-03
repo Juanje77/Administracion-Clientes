@@ -87,6 +87,7 @@ export default function ClienteDetalle() {
           <Dato titulo="Dirección" valor={c.direccion} />
           <Dato titulo="Ciudad" valor={c.ciudad} />
           <Dato titulo="Tipo de persona" valor={c.tipoPersona === 'FISICA' ? 'Física' : c.tipoPersona === 'JURIDICA' ? 'Jurídica' : ''} />
+          {c.tipoPersona === 'JURIDICA' && <Dato titulo="Cierre de balance" valor={c.cierreMes ? ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'][c.cierreMes - 1] : 'Sin cargar'} />}
           <Dato titulo="Condición IVA" valor={c.condicionIva} />
           <Dato titulo="Régimen" valor={c.regimen} />
           <Dato titulo="Etiquetas" valor={c.etiquetas.map((t) => t.nombre).join(', ')} />

@@ -17,7 +17,7 @@ export default function TareasCliente({ clienteId, clienteNombre }) {
   useEffect(() => { cargar(); }, [clienteId]);
 
   const guardado = (r) => { setCreando(false); setEditando(null); setMsg(textoAviso(r)); cargar(); };
-  const alternar = async (t) => { await api(`/tareas/${t.id}`, { metodo: 'PATCH', cuerpo: { hecha: !t.hecha } }); avisarAlertas(); cargar(); };
+  const alternar = async (t) => { const r = await api(`/tareas/${t.id}`, { metodo: 'PATCH', cuerpo: { hecha: !t.hecha } }); setMsg(r.siguiente ? textoAviso({ ...r, aviso: null }) : ''); avisarAlertas(); cargar(); };
   const borrar = async (t) => {
     if (!confirm('¿Borrar esta tarea?')) return;
     try { await api(`/tareas/${t.id}`, { metodo: 'DELETE' }); avisarAlertas(); cargar(); } catch (ex) { setError(ex.message); }

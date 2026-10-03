@@ -6,8 +6,9 @@ import Alerta from '../componentes/Alerta';
 
 const VACIO = {
   razonSocial: '', cuit: '', email: '', telefono: '', direccion: '', ciudad: '', notas: '',
-  estado: 'POTENCIAL', responsables: [], tipoPersona: '', condicionIva: '', regimen: '', etiquetas: '', obligaciones: [], abonoMensual: '', recordatorios: true,
+  estado: 'POTENCIAL', responsables: [], tipoPersona: '', cierreMes: '', condicionIva: '', regimen: '', etiquetas: '', obligaciones: [], abonoMensual: '', recordatorios: true,
 };
+const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 const CONDICIONES_IVA = ['Responsable Inscripto', 'Monotributista', 'Exento', 'Consumidor Final', 'No Responsable'];
 
 function Campo({ etiqueta, error, children }) {
@@ -105,6 +106,15 @@ export default function ClienteForm() {
             <option value="JURIDICA">Jurídica</option>
           </select>
         </Campo>
+        {f.tipoPersona === 'JURIDICA' && (
+          <Campo etiqueta={`Mes de cierre del balance${f.estado === 'ACTIVO' ? ' *' : ''}`} error={err('cierreMes')}>
+            <select className="campo" value={f.cierreMes} onChange={set('cierreMes')}>
+              <option value="">—</option>
+              {MESES.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
+            </select>
+            <p className="mt-1 text-xs text-machine">Define cuándo vence su DDJJ de Ganancias Sociedades (marcá esa obligación más abajo).</p>
+          </Campo>
+        )}
         <Campo etiqueta={`Condición frente al IVA${f.estado === 'ACTIVO' ? ' *' : ''}`} error={err('condicionIva')}>
           <select className="campo" value={f.condicionIva} onChange={set('condicionIva')}>
             <option value="">—</option>

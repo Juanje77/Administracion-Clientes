@@ -30,11 +30,11 @@ router.get('/clientes.:formato', async (req, res) => {
     columnas: [
       { titulo: 'Nombre / Razón social', ancho: 34 }, { titulo: 'CUIT', ancho: 16 }, { titulo: 'Email', ancho: 28 }, { titulo: 'Teléfono', ancho: 16 },
       { titulo: 'Dirección', ancho: 28 }, { titulo: 'Ciudad', ancho: 16 }, { titulo: 'Estado', ancho: 11 }, { titulo: 'Tipo de persona', ancho: 14 },
-      { titulo: 'Condición IVA', ancho: 22 }, { titulo: 'Régimen', ancho: 18 }, { titulo: 'Etiquetas', ancho: 22 },
+      { titulo: 'Condición IVA', ancho: 22 }, { titulo: 'Régimen', ancho: 18 }, { titulo: 'Mes de cierre de balance', ancho: 14 }, { titulo: 'Etiquetas', ancho: 22 },
       { titulo: 'Abono mensual', ancho: 15, tipo: 'dinero' }, { titulo: 'Notas', ancho: 40 }, { titulo: 'Alta', ancho: 12 },
     ],
     filas: lista.map((c) => [c.razonSocial, c.cuit, c.email, c.telefono, c.direccion, c.ciudad, ESTADO[c.estado], PERSONA[c.tipoPersona], c.condicionIva,
-      c.regimen, (c.etiquetas || []).join(', '), c.abonoMensual, c.notas, fecha(c.creadoEn)]),
+      c.regimen, c.cierreMes ?? '', (c.etiquetas || []).join(', '), c.abonoMensual, c.notas, fecha(c.creadoEn)]),
   };
   // El abono mensual es dinero: quien no tiene acceso a los montos no lo recibe en la planilla.
   if (!req.usuario.verDinero) {

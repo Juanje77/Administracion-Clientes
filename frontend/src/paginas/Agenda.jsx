@@ -29,7 +29,7 @@ export default function Agenda() {
   useEffect(cargar, [responsable, dias]);
   const guardado = (r) => { setCreando(false); setEditando(null); setMsg(textoAviso(r)); cargar(); };
 
-  const completar = async (t) => { await api(`/tareas/${t.id}`, { metodo: 'PATCH', cuerpo: { hecha: true } }); cargar(); };
+  const completar = async (t) => { const r = await api(`/tareas/${t.id}`, { metodo: 'PATCH', cuerpo: { hecha: true } }); setMsg(r.siguiente ? textoAviso({ ...r, aviso: null }) : ''); cargar(); };
   const presentar = async (v) => { await api(`/vencimientos/${v.id}`, { metodo: 'PATCH', cuerpo: { estado: 'PRESENTADO' } }); cargar(); };
 
   const cuenta = (lista, s) => lista.filter((x) => x.situacion === s).length;

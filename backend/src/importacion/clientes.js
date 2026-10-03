@@ -15,6 +15,7 @@ const CAMPOS = {
   tipoPersona: { titulo: 'Tipo de persona', sinonimos: ['tipo persona', 'tipo de persona', 'persona'] },
   condicionIva: { titulo: 'Condición IVA', sinonimos: ['condicion iva', 'condicion frente al iva', 'iva', 'condicion', 'situacion iva', 'cond iva'] },
   regimen: { titulo: 'Régimen', sinonimos: ['regimen'] },
+  cierreMes: { titulo: 'Mes de cierre de balance', sinonimos: ['cierre', 'mes de cierre', 'cierre de balance', 'mes cierre', 'cierre balance', 'cierre de ejercicio', 'mes de cierre de balance'] },
   notas: { titulo: 'Notas', sinonimos: ['notas', 'observaciones', 'comentarios', 'obs', 'observacion'] },
   etiquetas: { titulo: 'Etiquetas', sinonimos: ['etiquetas', 'tags', 'categoria', 'categorias'] },
 };
@@ -67,6 +68,18 @@ const personaDe = (v) => {
 };
 const personaPorCuit = (cuit) => (!cuit ? null : ['30', '33', '34'].includes(cuit.slice(0, 2)) ? 'JURIDICA' : ['20', '23', '24', '27'].includes(cuit.slice(0, 2)) ? 'FISICA' : null);
 
+const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+// "5", "mayo", "31/05" o "31/05/2026" -> 5
+function mesDe(v) {
+  const t = plano(v);
+  if (!t) return null;
+  const nombre = MESES.findIndex((m) => t.startsWith(m.slice(0, 3)));
+  if (nombre >= 0) return nombre + 1;
+  const partes = String(v).match(/\d+/g) || [];
+  const n = partes.length >= 2 ? Number(partes[1]) : Number(partes[0]);
+  return Number.isInteger(n) && n >= 1 && n <= 12 ? n : undefined;
+}
+
 const formatearCuit = (d) => `${d.slice(0, 2)}-${d.slice(2, 10)}-${d.slice(10)}`;
 const email = z.string().email();
 
@@ -114,6 +127,14 @@ function normalizarFila(v) {
     advertencias.push('Activo sin CUIT o condición IVA: completar para generar sus vencimientos');
   }
 
+  let cierreMes = null;
+  if (v.cierreMes) {
+    cierreMes = mesDe(v.cierreMes);
+    if (cierreMes === undefined) { cierreMes = null; advertencias.push(`Mes de cierre no reconocido (${v.cierreMes}): se omitió`); }
+  }
+  const tipoPersona = personaDe(v.tipoPersona) ?? personaPorCuit(cuit);
+  if (tipoPersona === 'JURIDICA' && !cierreMes) advertencias.push('Sociedad sin mes de cierre de balance: cargarlo para generar su vencimiento de Ganancias');
+
   const etiquetas = [...new Set((v.etiquetas || '').split(/[,;|]/).map((e) => e.trim().toLowerCase()).filter(Boolean))].slice(0, 20);
   if (v.notas) notas.unshift(v.notas);
 
@@ -123,7 +144,7 @@ function normalizarFila(v) {
       razonSocial, cuit, email: mail, telefono,
       direccion: v.direccion || null, ciudad: v.ciudad || null,
       notas: notas.join('\n') || null,
-      estado, tipoPersona: personaDe(v.tipoPersona) ?? personaPorCuit(cuit),
+      estado, tipoPersona, cierreMes,
       condicionIva: iva, regimen: v.regimen || null, etiquetas,
     },
   };
@@ -171,7 +192,7 @@ function procesar(filas, mapeoManual, existentes) {
   };
 }
 
-const ENCABEZADOS_PLANTILLA = ['Nombre / Razón social', 'CUIT', 'Email', 'Teléfono', 'Dirección', 'Ciudad', 'Estado', 'Tipo de persona', 'Condición IVA', 'Régimen', 'Etiquetas', 'Notas'];
-const EJEMPLO_PLANTILLA = ['Pérez Hnos. SRL', '30-12345678-1', 'contacto@perez.com', '2954 123456', 'Av. San Martín 123', 'Santa Rosa', 'Activo', 'Jurídica', 'Responsable Inscripto', 'Ganancias, IIBB', 'mensual, sueldos', 'Cliente desde 2019'];
+const ENCABEZADOS_PLANTILLA = ['Nombre / Razón social', 'CUIT', 'Email', 'Teléfono', 'Dirección', 'Ciudad', 'Estado', 'Tipo de persona', 'Condición IVA', 'Régimen', 'Mes de cierre de balance', 'Etiquetas', 'Notas'];
+const EJEMPLO_PLANTILLA = ['Pérez Hnos. SRL', '30-12345678-1', 'contacto@perez.com', '2954 123456', 'Av. San Martín 123', 'Santa Rosa', 'Activo', 'Jurídica', 'Responsable Inscripto', 'Ganancias, IIBB', 'Diciembre', 'mensual, sueldos', 'Cliente desde 2019'];
 
 module.exports = { procesar, detectarEncabezados, detectarMapeo, CAMPOS, ENCABEZADOS_PLANTILLA, EJEMPLO_PLANTILLA };

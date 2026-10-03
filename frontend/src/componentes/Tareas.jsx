@@ -19,13 +19,14 @@ export function useEquipo() {
 
 // Qué pasó con el email al asignar la tarea (el servidor lo informa en `aviso`).
 export function textoAviso(r) {
+  const prox = r.siguiente ? `Es recurrente: se creó la próxima para el ${verFecha(r.siguiente.vence)}. ` : '';
   const quien = r.asignadoNombre || 'La persona';
-  return {
+  return prox + ({
     enviado: `Se avisó por email a ${quien}.`,
     desactivado: `${quien} tiene los avisos por email desactivados.`,
     'sin-correo': 'El correo no está configurado, así que no se envió el aviso.',
     error: 'La tarea se guardó, pero no se pudo enviar el aviso por email.',
-  }[r.aviso] || '';
+  }[r.aviso] || '');
 }
 
 // Busca un cliente por nombre, CUIT, email o teléfono (opcional: una tarea puede ser interna).
@@ -73,7 +74,7 @@ export function SelectorCliente({ valor, onChange }) {
 // Crear o editar una tarea. `clienteFijo` = se crea dentro de la ficha de un cliente (no se puede cambiar).
 export function FormularioTarea({ tarea, clienteFijo, equipo, alGuardar, alCancelar }) {
   const { usuario } = useAuth();
-  const [f, setF] = useState({ titulo: tarea?.titulo ?? '', descripcion: tarea?.descripcion ?? '', vence: tarea?.vence ?? hoyISO(), asignadoA: tarea?.asignadoA ?? usuario.id });
+  const [f, setF] = useState({ titulo: tarea?.titulo ?? '', descripcion: tarea?.descripcion ?? '', vence: tarea?.vence ?? hoyISO(), asignadoA: tarea?.asignadoA ?? usuario.id, repite: tarea?.repite ?? 'NINGUNA' });
   const [cliente, setCliente] = useState(tarea?.clienteId ? { id: tarea.clienteId, nombre: tarea.clienteNombre } : null);
   const [error, setError] = useState('');
   const [guardando, setGuardando] = useState(false);
@@ -111,6 +112,16 @@ export function FormularioTarea({ tarea, clienteFijo, equipo, alGuardar, alCance
           <input className="campo" type="date" required value={f.vence} onChange={(e) => setF({ ...f, vence: e.target.value })} />
         </div>
       </div>
+      <div>
+        <label className="etiqueta-label">Se repite</label>
+        <select className="campo" value={f.repite} onChange={(e) => setF({ ...f, repite: e.target.value })}>
+          <option value="NINGUNA">No, es de una sola vez</option>
+          <option value="SEMANAL">Todas las semanas</option>
+          <option value="MENSUAL">Todos los meses</option>
+          <option value="ANUAL">Todos los años</option>
+        </select>
+        {f.repite !== 'NINGUNA' && <p className="mt-1 text-xs text-machine">Al completarla se crea sola la siguiente, con la fecha corrida.</p>}
+      </div>
       {!clienteFijo && (
         <div>
           <label className="etiqueta-label">Cliente (opcional)</label>
@@ -137,7 +148,7 @@ export function FilaTarea({ tarea: t, mostrarCliente = true, mostrarResponsable 
     <div className="flex items-start gap-3 text-sm">
       <input type="checkbox" checked={t.hecha} onChange={() => alCompletar(t)} aria-label={`${t.hecha ? 'Reabrir' : 'Completar'} ${t.titulo}`} className="mt-1 h-4 w-4" />
       <div className={`min-w-0 flex-1 ${t.hecha ? 'text-machine line-through' : ''}`}>
-        <p className="break-words">{t.titulo}</p>
+        <p className="break-words">{t.titulo}{t.repite && t.repite !== 'NINGUNA' && <span className="tecnica ml-2 text-machine">↻ {{ SEMANAL: 'Semanal', MENSUAL: 'Mensual', ANUAL: 'Anual' }[t.repite]}</span>}</p>
         {t.descripcion && <p className="whitespace-pre-line break-words text-xs text-machine">{t.descripcion}</p>}
         <p className="text-xs text-machine">
           {mostrarCliente && (t.clienteId ? <><Link className="enlace" to={`/clientes/${t.clienteId}`}>{t.clienteNombre}</Link> · </> : <>Tarea interna · </>)}

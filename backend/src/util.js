@@ -15,6 +15,18 @@ function sumarDias(fecha, dias) {
   return d.toISOString().slice(0, 10);
 }
 
+// Próxima fecha de una tarea recurrente. Si el día no existe en el mes siguiente (31 -> febrero) queda el último día.
+function siguienteFecha(fecha, repite) {
+  if (repite === 'SEMANAL') return sumarDias(fecha, 7);
+  const meses = repite === 'ANUAL' ? 12 : repite === 'MENSUAL' ? 1 : 0;
+  if (!meses) return null;
+  const [a, m, d] = fecha.split('-').map(Number);
+  const destino = new Date(Date.UTC(a, m - 1 + meses, 1));
+  const ultimo = new Date(Date.UTC(destino.getUTCFullYear(), destino.getUTCMonth() + 1, 0)).getUTCDate();
+  destino.setUTCDate(Math.min(d, ultimo));
+  return destino.toISOString().slice(0, 10);
+}
+
 const DIAS_ALERTA = 7;
 
 // Estado de un pendiente según su fecha: VENCIDA | HOY | PROXIMA (≤7 días) | FUTURA
@@ -54,4 +66,4 @@ function diasAgenda(valor) {
 }
 const LIMITE_AGENDA = 500;
 
-module.exports = { hoy, sumarDias, situacion, mapaClientes, mapaUsuarios, porFecha, DIAS_ALERTA, alertaTarea, alertaVencimiento, diasAgenda, LIMITE_AGENDA };
+module.exports = { hoy, sumarDias, siguienteFecha, situacion, mapaClientes, mapaUsuarios, porFecha, DIAS_ALERTA, alertaTarea, alertaVencimiento, diasAgenda, LIMITE_AGENDA };

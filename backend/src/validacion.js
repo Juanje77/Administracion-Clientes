@@ -32,6 +32,8 @@ const clienteSchema = z
     tipoPersona: opcional(z.enum(['FISICA', 'JURIDICA'])),
     condicionIva: opcional(z.string().trim()),
     regimen: opcional(z.string().trim()),
+    // Mes (1-12) en que cierra el balance de una sociedad: de él depende cuándo vence su DDJJ de Ganancias.
+    cierreMes: z.preprocess((v) => (v === '' || v === undefined ? null : v), z.coerce.number().int().min(1).max(12).nullable()).optional(),
     etiquetas: z.array(z.string().trim().min(1)).max(20).optional(),
     // Claves de las obligaciones del calendario impositivo que tiene este cliente.
     obligaciones: z.array(z.string().trim().min(1)).max(100).optional(),
@@ -44,6 +46,9 @@ const clienteSchema = z
   })
   .superRefine((c, ctx) => {
     // Datos fiscales obligatorios solo para clientes activos.
+    if (c.estado === 'ACTIVO' && c.tipoPersona === 'JURIDICA' && !c.cierreMes) {
+      ctx.addIssue({ code: 'custom', path: ['cierreMes'], message: 'Obligatorio para personas jurídicas activas (de él depende el vencimiento de Ganancias)' });
+    }
     if (c.estado === 'ACTIVO') {
       for (const campo of ['cuit', 'condicionIva']) {
         if (!c[campo]) {
@@ -83,12 +88,15 @@ const fecha = z
   }, 'Fecha inválida');
 const periodo = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'Período inválido (AAAA-MM)');
 
+const REPETICIONES = ['NINGUNA', 'SEMANAL', 'MENSUAL', 'ANUAL'];
 const tareaSchema = z.object({
   clienteId: opcional(z.string().min(1)), // vacío = tarea interna del estudio (sin cliente)
   titulo: z.string().trim().min(2, 'El título es obligatorio').max(200),
   descripcion: opcional(z.string().trim().max(2000)),
   vence: fecha,
   asignadoA: opcional(z.string().min(1)),
+  // Tarea de una sola vez (por defecto) o recurrente: al completarla se crea la siguiente.
+  repite: z.enum(REPETICIONES).optional(),
 });
 const tareaCambiosSchema = tareaSchema.partial().extend({ hecha: z.boolean().optional() });
 

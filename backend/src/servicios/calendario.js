@@ -4,6 +4,16 @@
 const { db } = require('../db');
 const { alertaVencimiento, hoy } = require('../util');
 
+const MESES = { enero: 1, febrero: 2, marzo: 3, abril: 4, mayo: 5, junio: 6, julio: 7, agosto: 8, septiembre: 9, setiembre: 9, octubre: 10, noviembre: 11, diciembre: 12 };
+
+// Ganancias Sociedades: cada fila del calendario corresponde a los balances que cerraron en cierto mes
+// ("DDJJ - Cierre: Mayo/2026"). Devuelve ese mes (1-12), o null si la fila no depende del cierre.
+function mesDeCierre(fila) {
+  if (!/^ganancias sociedades/.test(fila.clave)) return null;
+  const m = /cierre:?\s*([a-záéíóú]+)\s*\/\s*\d{4}/i.exec(fila.concepto || '');
+  return m ? MESES[m[1].normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()] ?? null : null;
+}
+
 const slug = (t) => t.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
 // `desde`: no se crean vencimientos con fecha anterior (al dar de alta un cliente no tiene sentido llenar la Agenda de vencidos).
@@ -11,11 +21,17 @@ async function aplicarFilas(periodo, filas, todos, { desde = null } = {}) {
   const clientes = todos.filter((c) => c.estado === 'ACTIVO' && (c.obligaciones || []).length);
   const sinCuit = new Set();
   const sinFecha = new Set();
+  const sinCierre = new Set();
   const previstos = [];
   for (const c of clientes) {
     const digitos = String(c.cuit || '').replace(/\D/g, '');
     for (const fila of filas.filter((f) => c.obligaciones.includes(f.clave))) {
       if (digitos.length !== 11) { sinCuit.add(c.razonSocial); continue; }
+      const cierre = mesDeCierre(fila);
+      if (cierre) {
+        if (!c.cierreMes) { sinCierre.add(c.razonSocial); continue; } // sin mes de cierre no se sabe qué fila le toca
+        if (Number(c.cierreMes) !== cierre) continue; // es el vencimiento de otras sociedades (otro cierre de balance)
+      }
       const vence = fila.fechas[digitos[10]];
       if (!vence) { sinFecha.add(`${c.razonSocial} – ${fila.titulo}`); continue; }
       if (desde && vence < desde) continue;
@@ -43,7 +59,7 @@ async function aplicarFilas(periodo, filas, todos, { desde = null } = {}) {
     });
     await lote.commit();
   }
-  return { clientes: clientes.length, creados, actualizados, sinCambios, sinCuit: [...sinCuit], sinFecha: [...sinFecha] };
+  return { clientes: clientes.length, creados, actualizados, sinCambios, sinCuit: [...sinCuit], sinFecha: [...sinFecha], sinCierre: [...sinCierre] };
 }
 
 // Al crear o editar un cliente: sus obligaciones pasan a la Agenda según todos los calendarios cargados.

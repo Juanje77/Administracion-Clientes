@@ -213,6 +213,11 @@ Solo administradores: *Clientes → Importar desde Excel*.
    original queda en *Notas*); solo se omiten las filas sin nombre y los duplicados (mismo CUIT, o mismo nombre si no hay CUIT).
    Sin estado en la planilla: queda *Activo* si tiene CUIT y condición IVA, y *Potencial* si no. Importar dos veces el mismo archivo no duplica.
 
+## Tareas recurrentes y cierre de balance
+
+- **Tareas:** pueden ser de una sola vez (por defecto) o repetirse cada semana, mes o año. Al completar una recurrente se crea sola la siguiente (misma persona y cliente, fecha corrida; el 31 pasa a fin de mes si el siguiente es más corto). Reabrir y volver a completar no duplica.
+- **Personas jurídicas:** llevan el **mes de cierre de balance** (obligatorio si están Activas; también se importa/exporta como columna). La DDJJ de Ganancias Sociedades vence en el mes que el calendario indica para ese cierre ("DDJJ - Cierre: Mayo/2026" en el calendario de octubre), con el día según el último dígito del CUIT. Al crear/editar la sociedad, o al aplicar un calendario, solo se genera el vencimiento de la fila que coincide con su cierre. Si falta el mes de cierre, no se genera y se avisa. Los anticipos de personas jurídicas aún no dependen del cierre.
+
 ## Calendario impositivo mensual
 
 Al **crear o editar un cliente** activo con obligaciones marcadas (y CUIT), sus vencimientos pasan solos a la Agenda con la fecha que le corresponde según el último dígito del CUIT, para todos los calendarios ya cargados (se omiten fechas ya pasadas). "Aplicar a los clientes" sigue sirviendo al cargar un calendario nuevo.

@@ -211,6 +211,7 @@ export default function Calendario() {
           <p className="font-medium">Calendario de {nombrePeriodo(resultado.periodo)} aplicado a {resultado.clientes} clientes activos con obligaciones.</p>
           <p>Vencimientos creados: {resultado.creados} · actualizados: {resultado.actualizados} · sin cambios: {resultado.sinCambios}.</p>
           {resultado.sinCuit.length > 0 && <p className="text-figure">Sin CUIT válido (omitidos): {resultado.sinCuit.join(', ')}.</p>}
+          {resultado.sinCierre?.length > 0 && <p className="text-figure">Sociedades sin mes de cierre de balance (no se les generó Ganancias Sociedades): {resultado.sinCierre.join(', ')}.</p>}
           {resultado.sinFecha.length > 0 && <p className="text-figure">Sin fecha en el calendario: {resultado.sinFecha.join('; ')}.</p>}
           {resultado.clientes === 0 && <p>Ningún cliente activo tiene obligaciones marcadas: edita cada cliente y selecciónalas.</p>}
         </div>
