@@ -5,7 +5,8 @@
   "outputDirectory": "frontend/dist",
   "functions": {
     "api/index.js": {
-      "maxDuration": 30
+      "maxDuration": 30,
+      "includeFiles": "backend/src/correo/*.png"
     }
   },
   "rewrites": [

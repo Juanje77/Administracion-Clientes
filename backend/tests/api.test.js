@@ -982,6 +982,11 @@ describe('transporte SMTP real', () => {
       expect(r.replyTo.value[0].address).toBe('consultas@estudio.test');
       expect(r.html).toContain('José Núñez &lt;S.A.&gt;');
       expect(r.html).toContain('vence el 19/10/2026');
+      // el monograma viaja dentro del mensaje (adjunto inline referenciado por cid)
+      expect(r.html).toMatch(/<img src="(cid:logo-estudio|data:image\/png)/); // el lector de pruebas puede convertir el cid en data:
+      expect(r.attachments).toHaveLength(1);
+      expect(r.attachments[0]).toMatchObject({ contentType: 'image/png', contentId: '<logo-estudio>' });
+      expect(r.attachments[0].content.subarray(1, 4).toString()).toBe('PNG');
       expect(r.text).toContain('IVA – DDJJ: vence el 19/10/2026');
     } finally {
       await new Promise((r) => servidor.close(r));

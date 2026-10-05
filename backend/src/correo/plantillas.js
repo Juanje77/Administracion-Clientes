@@ -6,7 +6,7 @@ const esc = (t) => String(t ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '
 const fecha = (f) => f.split('-').reverse().join('/');
 
 // Marca: azul marino, esquinas rectas, sin sombras. Los clientes de correo no cargan fuentes propias, así que se piden
-// Barlow / Arial Narrow con alternativas; el monograma solo se muestra si APP_URL es una dirección pública (https).
+// Barlow / Arial Narrow con alternativas.
 const AZUL = '#0c284b';
 const TINTA = '#14202e';
 const TENUE = '#5b6d84';
@@ -15,10 +15,10 @@ const ROJO = '#a33a2f';
 const OCRE = '#8a6212';
 const TITULOS = "'Barlow Condensed','Arial Narrow',Arial,sans-serif";
 
-function logo() {
-  const base = (process.env.APP_URL || '').replace(/\/$/, '');
-  return /^https:\/\//.test(base) ? `<img src="${esc(base)}/logo-1.png" width="40" height="40" alt="" style="vertical-align:middle;margin-right:12px;border:0">` : '';
-}
+// El monograma viaja dentro del propio mensaje (adjunto "inline" con cid), así se ve sin depender de APP_URL ni de una
+// dirección pública. transporte.js agrega el adjunto cuando el HTML hace referencia a este cid.
+const LOGO_CID = 'logo-estudio';
+const logo = () => `<img src="cid:${LOGO_CID}" width="40" height="40" alt="" style="vertical-align:middle;margin-right:12px;border:0">`;
 
 const MARCO = (titulo, cuerpo, pie) => `<!doctype html><html lang="es"><body style="margin:0;background:#f4f5f7;font-family:Barlow,Helvetica,Arial,sans-serif;color:${TINTA}">
 <div style="max-width:600px;margin:0 auto;padding:16px">
@@ -111,4 +111,4 @@ function prueba({ estudio }) {
   };
 }
 
-module.exports = { resumenEquipo, recordatorioDeuda, recordatorioVencimientos, tareaAsignada, prueba, esc, pesos, fecha };
+module.exports = { LOGO_CID, resumenEquipo, recordatorioDeuda, recordatorioVencimientos, tareaAsignada, prueba, esc, pesos, fecha };

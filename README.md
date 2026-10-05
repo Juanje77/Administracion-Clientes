@@ -172,6 +172,8 @@ Opcionales: `MAIL_FROM` (remitente completo) y `MAIL_REPLY_TO` (a dónde llegan 
 **Envío automático en Vercel:** `vercel.json` ya incluye el cron (`0 11 * * 1-5`, que son las 8:00 de Argentina). Solo hace falta cargar `CRON_SECRET`; Vercel lo envía solo al llamar.
 En el plan gratuito de Vercel los crons corren una vez por día con una ventana de hasta una hora. Sin `CRON_SECRET` el cron queda cerrado, pero puedes usar *Enviar ahora* a mano.
 
+**Logo en los mails:** el monograma viaja adjunto dentro de cada mensaje (`backend/src/correo/logo-estudio.png`), así que se ve sin depender de `APP_URL`. Para cambiarlo, reemplazá ese archivo.
+
 **Límites:** una cuenta de Gmail común permite unos 500 destinatarios por día y puede mandar a spam si se envía mucho: para muchos clientes conviene una cuenta
 de Google Workspace o un dominio propio. Cada ejecución se corta a los ~22 segundos para respetar el tiempo máximo de la función; lo que quede sale en la siguiente.
 El historial (`envios`) no guarda el contenido de los correos y no se borra solo.

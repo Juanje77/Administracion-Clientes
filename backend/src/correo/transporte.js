@@ -1,8 +1,13 @@
 // Envío de emails por SMTP (por defecto Gmail con "contraseña de aplicación").
 // Variables: SMTP_USER, SMTP_PASS (obligatorias), SMTP_HOST (smtp.gmail.com), SMTP_PORT (465),
 // MAIL_FROM (opcional), MAIL_REPLY_TO (opcional), ESTUDIO_NOMBRE.
+const fs = require('fs');
+const path = require('path');
 const nodemailer = require('nodemailer');
 const { errorConfig } = require('../db');
+
+const LOGO = path.join(__dirname, 'logo-estudio.png');
+const LOGO_CID = 'logo-estudio'; // el mismo que usan las plantillas
 
 let transporte = null;
 let reemplazo = null; // para los tests
@@ -38,6 +43,7 @@ async function enviar({ to, subject, html, text, replyTo }) {
     html,
     text,
     replyTo: replyTo || process.env.MAIL_REPLY_TO || undefined,
+    attachments: html && html.includes(`cid:${LOGO_CID}`) ? [{ filename: 'logo.png', content: fs.readFileSync(LOGO), cid: LOGO_CID, contentDisposition: 'inline' }] : undefined,
   });
 }
 
