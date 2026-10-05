@@ -4,48 +4,46 @@
 
 @layer base {
   :root { color-scheme: light; }
-  body { @apply bg-white font-sans text-figure antialiased; font-size: 16px; line-height: 1.5; letter-spacing: -0.16px; }
+  body { @apply bg-fondo font-sans text-tinta antialiased; font-size: 16px; line-height: 1.5; }
   h1, h2, h3 { @apply font-normal; }
-  input[type='checkbox'], input[type='radio'] { accent-color: #0c0c0c; }
-  ::selection { background: #0c0c0c; color: #ffffff; }
-  /* Foco siempre visible: contorno negro de 2 px (los campos usan una línea más gruesa, ver .campo) */
-  :focus-visible { outline: 2px solid #0c0c0c; outline-offset: 2px; }
+  input[type='checkbox'], input[type='radio'] { accent-color: #0c284b; }
+  ::selection { background: #0c284b; color: #ffffff; }
+  :focus-visible { outline: 2px solid #0c284b; outline-offset: 2px; }
   table { border-collapse: collapse; }
 }
 
 @layer components {
   /* ---------- Tipografía ---------- */
-  /* Etiquetas, navegación y cifras: la cara "técnica", en mayúsculas */
-  .tecnica { @apply font-tecnica font-normal uppercase tracking-nav; }
-  .titulo-pagina { @apply font-tecnica text-[22px] font-normal uppercase leading-[1.11] text-figure sm:text-[28px]; }
-  .titulo-seccion { @apply text-[20px] font-normal leading-[1.1] tracking-[-0.22px] text-figure sm:text-[22px]; }
-  .etiqueta-label { @apply tecnica mb-1 block text-[12px] text-machine; }
+  /* Títulos y etiquetas: Barlow Condensed 600 en mayúsculas */
+  .tecnica { @apply font-tecnica font-semibold uppercase tracking-nav; }
+  .titulo-pagina { @apply font-tecnica text-[36px] font-semibold uppercase leading-none text-figure sm:text-[48px]; }
+  .titulo-seccion { @apply font-tecnica text-[22px] font-semibold uppercase leading-tight tracking-nav text-figure; }
+  .etiqueta-label { @apply mb-1 block text-[14px] text-machine; }
   .texto-tenue { @apply text-machine; }
 
-  /* ---------- Superficies: sin sombras, separadas por reglas de 1 px ---------- */
-  .panel { @apply rounded-panel border border-regla bg-white p-5 sm:p-8; }
-  .panel-plano { @apply rounded-panel border border-regla bg-white; }
-  .encabezado-tabla { @apply tecnica border-b border-figure text-[12px] text-machine; }
+  /* ---------- Superficies: bordes de 1 px, esquinas rectas, sin sombras ---------- */
+  .panel { @apply border border-regla bg-white p-5 sm:p-6; }
+  .panel-plano { @apply border border-regla bg-white; }
+  .encabezado-tabla { @apply border-b border-regla text-[13px] uppercase tracking-[.08em] text-machine; }
 
-  /* ---------- Campos: transparentes, esquinas rectas y una sola línea negra ---------- */
-  .campo { @apply w-full rounded-none border-0 border-b border-figure bg-transparent px-0 py-2 text-[14px] leading-normal text-figure placeholder:text-machine focus:border-b-2 focus:outline-none disabled:opacity-50; }
-  select.campo { @apply cursor-pointer appearance-none pr-6; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5 6 6.5 11 1.5' fill='none' stroke='%230c0c0c' stroke-width='1.5'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 2px center; }
-  textarea.campo { @apply border border-figure px-3 focus:border-2; }
-  input[type='date'].campo, input[type='month'].campo { @apply pr-1; }
+  /* ---------- Campos ---------- */
+  .campo { @apply w-full rounded-none border border-campo bg-white px-3 py-2.5 text-[16px] leading-normal text-tinta placeholder:text-machine focus:border-figure focus:outline-none disabled:opacity-50; }
+  select.campo { @apply cursor-pointer appearance-none pr-8; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5 6 6.5 11 1.5' fill='none' stroke='%230c284b' stroke-width='1.5'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; }
+  input[type='date'].campo, input[type='month'].campo { @apply pr-2; }
 
-  /* ---------- Botones: píldora negra de 24 px de radio ---------- */
-  .btn { @apply inline-flex h-10 cursor-pointer items-center justify-center whitespace-nowrap rounded-boton border px-6 text-[14px] font-medium leading-[1.2] transition-colors disabled:cursor-not-allowed disabled:opacity-40 sm:px-8; }
-  .btn-primario { @apply btn border-figure bg-figure text-white hover:bg-black; }
+  /* ---------- Botones: sólido azul marino, mayúsculas, esquinas rectas ---------- */
+  .btn { @apply inline-flex h-11 cursor-pointer items-center justify-center whitespace-nowrap rounded-none border px-5 text-[14px] font-medium uppercase leading-[1.2] tracking-[.06em] transition-colors disabled:cursor-not-allowed disabled:opacity-40; }
+  .btn-primario { @apply btn border-figure bg-figure text-white hover:border-hover hover:bg-hover; }
   .btn-sec { @apply btn border-figure bg-white text-figure hover:bg-figure hover:text-white; }
   .btn-peligro { @apply btn-sec; }
-  .btn-sm { @apply h-8 px-4 text-[13px] sm:px-5; }
-  /* Acción secundaria "de texto": subrayada, sin relleno */
+  .btn-sm { @apply h-9 px-4 text-[13px]; }
   .enlace { @apply text-figure underline decoration-1 underline-offset-4 hover:decoration-2; }
   .enlace-tenue { @apply text-machine underline decoration-1 underline-offset-4 hover:text-figure; }
 
-  /* ---------- Insignias de estado: solo blanco, negro y gris (sin colores de semáforo) ---------- */
-  .insignia { @apply inline-flex h-6 items-center whitespace-nowrap rounded-full border px-3 text-[12px] font-medium; }
-  .insignia-negra { @apply insignia border-figure bg-figure text-white; }        /* urgente / requiere acción */
-  .insignia-linea { @apply insignia border-figure bg-white text-figure; }        /* atención / en curso */
-  .insignia-gris { @apply insignia border-regla bg-white text-machine; }         /* tranquilo / cerrado */
+  /* ---------- Etiquetas de estado: borde y texto de color, sin relleno ---------- */
+  .insignia { @apply inline-flex h-6 items-center whitespace-nowrap border bg-white px-2 text-[13px] font-medium; }
+  .insignia-negra { @apply insignia border-venc text-venc; }     /* vencido / urgente */
+  .insignia-linea { @apply insignia border-pend text-pend; }     /* pendiente / atención */
+  .insignia-ok { @apply insignia border-ok text-ok; }            /* al día / pagado */
+  .insignia-gris { @apply insignia border-regla text-machine; }  /* neutro / cerrado */
 }

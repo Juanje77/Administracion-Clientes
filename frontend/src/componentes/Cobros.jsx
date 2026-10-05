@@ -6,7 +6,7 @@ import { verFecha } from '../fechas';
 import Alerta from './Alerta';
 
 const MEDIOS = { TRANSFERENCIA: 'Transferencia', EFECTIVO: 'Efectivo', CHEQUE: 'Cheque', TARJETA: 'Tarjeta', OTRO: 'Otro' };
-const ESTILO = { PENDIENTE: 'insignia-linea', PARCIAL: 'insignia-linea', PAGADO: 'insignia-gris' };
+const ESTILO = { PENDIENTE: 'insignia-linea', PARCIAL: 'insignia-linea', PAGADO: 'insignia-ok' };
 const NOMBRE = { PENDIENTE: 'Pendiente', PARCIAL: 'Parcial', PAGADO: 'Pagado' };
 
 export function EstadoCobro({ honorario }) {

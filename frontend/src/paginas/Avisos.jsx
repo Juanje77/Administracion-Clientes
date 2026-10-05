@@ -3,7 +3,7 @@ import { api } from '../api';
 import Alerta from '../componentes/Alerta';
 
 const TIPOS = { equipo: 'Resumen al equipo', 'cliente-deuda': 'Recordatorio de deuda', 'cliente-vencimientos': 'Recordatorio de vencimientos' };
-const ESTADO = { enviado: ['Enviado', 'insignia-gris'], error: ['Error', 'insignia-negra'], enviando: ['Enviando', 'insignia-linea'] };
+const ESTADO = { enviado: ['Enviado', 'insignia-ok'], error: ['Error', 'insignia-negra'], enviando: ['Enviando', 'insignia-linea'] };
 const fecha = (d) => new Date(d).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' });
 
 function Interruptor({ checked, onChange, titulo, detalle }) {

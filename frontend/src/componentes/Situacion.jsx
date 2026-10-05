@@ -3,7 +3,7 @@ const estilos = {
   HOY: 'insignia-negra',
   PROXIMA: 'insignia-linea',
   FUTURA: 'insignia-gris',
-  CERRADA: 'insignia-gris',
+  CERRADA: 'insignia-ok',
 };
 const nombres = { VENCIDA: 'Vencida', HOY: 'Hoy', PROXIMA: 'Próxima', FUTURA: 'Pendiente', CERRADA: 'Cerrada' };
 

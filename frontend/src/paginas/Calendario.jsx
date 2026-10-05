@@ -41,7 +41,7 @@ function FilaEditable({ fila, alCambiar, alBorrar }) {
         {!abierta ? (
           <div className="flex flex-wrap gap-1.5">
             {resumen.map((g) => (
-              <span key={g.fecha} className="rounded-full border border-regla px-3 py-0.5 text-xs text-figure">
+              <span key={g.fecha} className="rounded-none border border-regla px-3 py-0.5 text-xs text-figure">
                 {g.digitos} → {g.fecha ? verFecha(g.fecha).slice(0, 5) : 'sin fecha'}
               </span>
             ))}

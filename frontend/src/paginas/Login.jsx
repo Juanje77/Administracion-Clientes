@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useAuth } from '../auth';
 import Alerta from '../componentes/Alerta';
-import Marca from '../componentes/Marca';
 
 export default function Login() {
   const { login } = useAuth();
@@ -24,22 +23,28 @@ export default function Login() {
   }
 
   return (
-    <div className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-6 py-12">
-      <Marca tamano={28} className="mb-8" />
-      <h1 className="tecnica text-[44px] leading-none tracking-[-0.03em] sm:text-[64px]">Estudio<br />Contable</h1>
-      <p className="mt-4 text-[16px] text-machine">Administración de clientes</p>
-      <form onSubmit={enviar} className="mt-12 space-y-7">
-        <div>
-          <label className="etiqueta-label" htmlFor="email">Email</label>
-          <input id="email" type="email" required autoComplete="username" className="campo" value={email} onChange={(e) => setEmail(e.target.value)} />
-        </div>
-        <div>
-          <label className="etiqueta-label" htmlFor="password">Contraseña</label>
-          <input id="password" type="password" required autoComplete="current-password" className="campo" value={password} onChange={(e) => setPassword(e.target.value)} />
-        </div>
-        {error && <Alerta tipo="error">{error}</Alerta>}
-        <button className="btn-primario w-full sm:w-auto" disabled={cargando}>{cargando ? 'Ingresando…' : 'Ingresar'}</button>
-      </form>
+    <div className="grid min-h-screen bg-white lg:grid-cols-2">
+      {/* Panel de marca (en el celular, una franja arriba) */}
+      <div className="relative flex items-center justify-center bg-figure px-8 py-5 lg:py-12">
+        <img src="/logo-1.png" alt="JC" className="w-16 lg:w-[min(380px,70%)]" />
+        <p className="absolute bottom-8 left-12 hidden text-[15px] uppercase tracking-[.14em] text-suave lg:block">Administración de clientes</p>
+      </div>
+      <div className="flex items-center justify-center px-6 py-10 lg:px-12">
+        <form onSubmit={enviar} className="flex w-full max-w-[340px] flex-col gap-5">
+          <img src="/logo-3.png" alt="Juan Costantini" className="mx-auto -mb-4 w-[200px]" />
+          <h1 className="titulo-pagina !text-[40px]">Ingresar</h1>
+          <div>
+            <label className="etiqueta-label" htmlFor="email">Correo</label>
+            <input id="email" type="email" required autoComplete="username" className="campo" value={email} onChange={(e) => setEmail(e.target.value)} />
+          </div>
+          <div>
+            <label className="etiqueta-label" htmlFor="password">Contraseña</label>
+            <input id="password" type="password" required autoComplete="current-password" className="campo" value={password} onChange={(e) => setPassword(e.target.value)} />
+          </div>
+          {error && <Alerta tipo="error">{error}</Alerta>}
+          <button className="btn-primario h-12 w-full" disabled={cargando}>{cargando ? 'Ingresando…' : 'Entrar'}</button>
+        </form>
+      </div>
     </div>
   );
 }

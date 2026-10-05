@@ -1,8 +1,4 @@
-// Marca escalonada del estudio (tres barras), en negro sobre blanco.
-export default function Marca({ tamano = 20, className = '' }) {
-  return (
-    <svg width={tamano} height={tamano} viewBox="8 8 16 16" aria-hidden="true" className={className} fill="currentColor">
-      <path d="M9 10h14v3H9zM9 15h10v3H9zM9 20h14v3H9z" />
-    </svg>
-  );
+// Monograma JC del estudio (logo-1: blanco sobre azul marino).
+export default function Marca({ tamano = 44, className = '' }) {
+  return <img src="/logo-1.png" width={tamano} height={tamano} alt="" aria-hidden="true" className={className} />;
 }

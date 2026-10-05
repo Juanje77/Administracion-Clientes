@@ -119,7 +119,7 @@ export default function ClienteDetalle() {
         <ul className="divide-y">
           {interacciones.map((i) => (
             <li key={i.id} className="flex items-start gap-3 py-2 text-sm">
-              <span className="insignia-linea w-24 shrink-0 justify-center">{TIPOS[i.tipo]}</span>
+              <span className="insignia-gris w-24 shrink-0 justify-center">{TIPOS[i.tipo]}</span>
               <div className="flex-1">
                 <p className="whitespace-pre-wrap">{i.detalle}</p>
                 <p className="text-xs text-machine">{fecha(i.fecha)} · {i.usuario.nombre}</p>

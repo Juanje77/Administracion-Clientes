@@ -4,7 +4,7 @@ import { api } from '../api';
 import Alerta from '../componentes/Alerta';
 
 const ESTILO = {
-  OK: 'insignia-gris',
+  OK: 'insignia-ok',
   ADVERTENCIA: 'insignia-linea',
   RECHAZADA: 'insignia-negra',
 };
@@ -58,7 +58,7 @@ export default function Importar() {
   const filas = vista?.filas.filter((f) => filtro === 'TODAS' || (filtro === 'AVISOS' ? f.estado === 'ADVERTENCIA' : f.estado === 'RECHAZADA')) ?? [];
   const importables = vista ? vista.resumen.ok + vista.resumen.advertencias : 0;
   const Chip = ({ id, texto, n }) => (
-    <button onClick={() => setFiltro(id)} className={`rounded-full border px-3 py-1 text-sm ${filtro === id ? 'border-figure  text-figure' : 'bg-white'}`}>{texto} ({n})</button>
+    <button onClick={() => setFiltro(id)} className={`rounded-none border px-3 py-1 text-sm ${filtro === id ? 'border-figure  text-figure' : 'bg-white'}`}>{texto} ({n})</button>
   );
 
   return (

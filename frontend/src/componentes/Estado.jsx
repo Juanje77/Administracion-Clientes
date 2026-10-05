@@ -1,5 +1,5 @@
 const estilos = {
-  ACTIVO: 'insignia-linea',
+  ACTIVO: 'insignia-ok',
   INACTIVO: 'insignia-gris',
   POTENCIAL: 'insignia-gris',
 };

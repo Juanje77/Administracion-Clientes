@@ -101,12 +101,11 @@ Las tareas y vencimientos pendientes llevan un campo auxiliar (`alerta`) que des
 solo lo pendiente sin leer el historial.
 
 ## Estilo visual
-La interfaz sigue la guía de estilo `DESIGN_1.md` (referencia "FigureAI"): lienzo blanco, texto en negro exacto (`#0c0c0c`), grises técnicos (`#6d6d6d` para texto secundario y
-`#cecece` para las reglas de 1 px) y **ningún color de acento, degradado ni sombra**. La navegación y las cifras usan *Space Grotesk* en mayúsculas (sustituto de PP Neue Machina) y el texto
-*Inter* (sustituto de Neue Haas Grotesk), ambas incluidas en el proyecto (no se descargan de internet). Botones: píldora negra de 24 px de radio; campos transparentes con una sola línea;
-paneles de 12 px de radio con borde fino. Como no hay colores de semáforo, los estados se distinguen por forma y texto: **insignia negra** = requiere acción (vencida, hoy, vencido),
-**con contorno** = atención (próxima, parcial, pendiente) y **gris** = tranquilo o cerrado; los mensajes llevan un símbolo (✕ error, ✓ listo, ! aviso). La paleta está limitada en
-`frontend/tailwind.config.js`: cualquier clase de color fuera de ella simplemente no se genera, así que no se puede "colar" un color sin querer. Los correos y el gráfico siguen el mismo estilo.
+Diseño de marca "Juan Costantini": azul marino `#0c284b` (hover `#1d4373`), fondo `#f4f5f7`, bordes de 1 px `#cfd6e0`, esquinas rectas y sin sombras.
+Títulos en Barlow Condensed 600 (mayúsculas) y cuerpo en Barlow (paquetes `@fontsource`, sin depender de Google en ejecución). Barra lateral azul marino en
+escritorio y barra superior con menú en el celular; estados como etiquetas con borde de color (Al día/Pagada `#2f6b4f`, Pendiente `#8a6212`, Vencido `#a33a2f`).
+Los logos están en `frontend/public/` (`logo-1.png` monograma blanco, `logo-3.png` logo completo, ambos con fondo transparente, y `favicon.png`).
+Los colores y fuentes se definen en `frontend/tailwind.config.js` y las clases comunes (`.btn-primario`, `.campo`, `.panel`, `.insignia-*`) en `frontend/src/index.css`.
 
 ## Quién ve el dinero
 **Todo lo que es dinero lo ve únicamente quien tiene acceso a los montos.** Los administradores siempre lo tienen; un usuario común **no lo tiene por defecto** y un administrador

@@ -5,7 +5,7 @@ import { nombrePeriodo } from '../fechas';
 // Columnas de "cobrado por mes". Una sola serie (el título la nombra, no hace falta leyenda).
 // Columnas negras de borde recto, reglas de 1 px y etiquetas en gris técnico; el mes elegido va en negrita.
 // Hay tooltip al pasar el cursor/enfocar y una vista de tabla para quien no puede leer el gráfico.
-const COLOR = '#0c0c0c'; // Figure Black: una sola serie, sin color de acento
+const COLOR = '#0c284b'; // azul marino de marca: una sola serie
 
 export default function GraficoMeses({ serie, seleccionado }) {
   const [tabla, setTabla] = useState(false);
