@@ -142,6 +142,8 @@ const pagoSchema = z.object({
   fecha: fecha.optional(),
   medio: z.enum(MEDIOS_PAGO).default('TRANSFERENCIA'),
   nota: opcional(z.string().trim().max(300)),
+  // Enviar el recibo por email al cliente al registrar el cobro (por defecto sí, si el cliente tiene email).
+  enviarRecibo: z.boolean().optional(),
 });
 
 const CATEGORIAS_DOC = ['CONTRATO', 'PRESUPUESTO', 'FACTURA', 'CONSTANCIA', 'BALANCE', 'OTRO'];

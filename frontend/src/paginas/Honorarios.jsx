@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../api';
 import { mesActual, pesos } from '../formato';
 import Dato from '../componentes/Dato';
-import { CobroForm, EstadoCobro, ListaCobros } from '../componentes/Cobros';
+import { CobroForm, EstadoCobro, ListaCobros, textoRecibo } from '../componentes/Cobros';
 import Alerta from '../componentes/Alerta';
 
 function PorMes() {
@@ -32,7 +32,7 @@ function PorMes() {
       setMsg({ ok: false, texto: ex.message });
     }
   }
-  const terminado = () => { setAbierto(null); cargar(); };
+  const terminado = (r) => { setAbierto(r && r.pago ? { id: r.honorario.id, modo: 'ver', aviso: textoRecibo(r.recibo) } : null); cargar(); };
 
   return (
     <div className="space-y-4">
@@ -80,7 +80,7 @@ function PorMes() {
                 </tr>
                 {abierto?.id === h.id && (
                   <tr><td colSpan={7} className="px-3 py-3">
-                    {abierto.modo === 'cobrar' ? <CobroForm honorario={h} alGuardar={terminado} alCancelar={() => setAbierto(null)} /> : <ListaCobros honorario={h} alCambiar={terminado} />}
+                    {abierto.modo === 'cobrar' ? <CobroForm honorario={h} alGuardar={terminado} alCancelar={() => setAbierto(null)} /> : <ListaCobros honorario={h} alCambiar={terminado} aviso={abierto.aviso} />}
                   </td></tr>
                 )}
               </Fragment>

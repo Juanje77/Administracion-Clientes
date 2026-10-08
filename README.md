@@ -205,6 +205,10 @@ En la ficha de cada cliente: subir contratos, presupuestos, facturas, constancia
 - *Deudores* muestra cuánto debe cada cliente sumando todos los meses. Solo un administrador puede anular un cobro o borrar un honorario.
 - Los importes se guardan con centavos. Colecciones: `honorarios` y `pagos`.
 
+**Recibo por email:** al registrar un cobro se envía al cliente un recibo (con logo, número correlativo `R-00000001`, fecha, concepto, medio de pago, importe y saldo; aclara que no reemplaza a la factura).
+Es una casilla del formulario de cobro, marcada por defecto. No se envía si el cliente no tiene email o pidió no recibir avisos (casilla "recordatorios" de su ficha), y si el correo falla el cobro igual queda registrado.
+Cada recibo se manda una sola vez; en *Cobros* de cada honorario se puede **reenviar** (por ejemplo si cambió el email). El envío queda en el historial de *Avisos*.
+
 ## Importar clientes desde Excel / CSV
 Solo administradores: *Clientes → Importar desde Excel*.
 1. Sube tu planilla (.xlsx o .csv; hay una plantilla de ejemplo para descargar). Las columnas se reconocen por su nombre

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../api';
 import { useAuth } from '../auth';
 import { mesActual, pesos } from '../formato';
-import { CobroForm, EstadoCobro, ListaCobros } from './Cobros';
+import { CobroForm, EstadoCobro, ListaCobros, textoRecibo } from './Cobros';
 import Alerta from './Alerta';
 
 export default function HonorariosCliente({ clienteId, abonoMensual }) {
@@ -31,7 +31,7 @@ export default function HonorariosCliente({ clienteId, abonoMensual }) {
     await api(`/honorarios/${h.id}`, { metodo: 'DELETE' });
     cargar();
   }
-  const terminado = () => { setAbierto(null); cargar(); };
+  const terminado = (r) => { setAbierto(r && r.pago ? { id: r.honorario.id, modo: 'ver', aviso: textoRecibo(r.recibo) } : null); cargar(); };
 
   return (
     <section className="panel">
@@ -65,7 +65,7 @@ export default function HonorariosCliente({ clienteId, abonoMensual }) {
               {usuario.rol === 'ADMIN' && <button className="text-xs enlace-tenue" onClick={() => borrar(h)}>Borrar</button>}
             </div>
             {abierto?.id === h.id && abierto.modo === 'cobrar' && <CobroForm honorario={h} alGuardar={terminado} alCancelar={() => setAbierto(null)} />}
-            {abierto?.id === h.id && abierto.modo === 'ver' && <ListaCobros honorario={h} alCambiar={terminado} />}
+            {abierto?.id === h.id && abierto.modo === 'ver' && <ListaCobros honorario={h} alCambiar={terminado} aviso={abierto.aviso} />}
           </li>
         ))}
         {datos.datos.length === 0 && <li className="py-4 text-center text-sm text-machine">Sin honorarios cargados.</li>}

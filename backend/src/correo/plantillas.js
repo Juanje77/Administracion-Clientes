@@ -103,6 +103,29 @@ function tareaAsignada({ nombre, quien, titulo, cliente, vence, descripcion, est
   return { html, text, subject: `Nueva tarea: ${titulo}` };
 }
 
+// Recibo de pago al cliente.
+const MEDIOS = { EFECTIVO: 'Efectivo', TRANSFERENCIA: 'Transferencia', CHEQUE: 'Cheque', TARJETA: 'Tarjeta', OTRO: 'Otro' };
+const numeroRecibo = (n) => `R-${String(n || 0).padStart(8, '0')}`;
+function recibo({ cliente, estudio, numero, fecha: f, concepto, periodo, monto, medio, nota, saldo }) {
+  const filas = [
+    ...(numero ? [['Recibo N°', numeroRecibo(numero)]] : []),
+    ['Fecha', fecha(f)],
+    ['Recibimos de', esc(cliente)],
+    ['Concepto', `${esc(concepto)} · ${esc(periodo)}`],
+    ['Medio de pago', MEDIOS[medio] || esc(medio)],
+    ...(nota ? [['Nota', esc(nota)]] : []),
+  ].map(([k, v]) => `<tr><td style="padding:4px 16px 4px 0;color:${TENUE};vertical-align:top">${k}</td><td style="padding:4px 0">${v}</td></tr>`).join('');
+  const html = MARCO('Recibo de pago', `<p style="font-size:14px;margin:0 0 12px">Hola ${esc(cliente)}, confirmamos la recepción de tu pago. ¡Gracias!</p>
+<table style="font-size:14px;border-collapse:collapse">${filas}</table>
+<p style="font-family:${TITULOS};font-size:30px;font-weight:600;color:${AZUL};margin:16px 0 4px">${pesos(monto)}</p>
+<p style="font-size:14px;margin:0;color:${saldo > 0 ? OCRE : TENUE}">${saldo > 0 ? `Saldo pendiente de este concepto: ${pesos(saldo)}` : 'Este concepto queda cancelado.'}</p>
+<p style="font-size:12px;color:${TENUE};margin:16px 0 0">Este comprobante acredita el pago recibido. No reemplaza a la factura.</p>`, PIE_CLIENTE(estudio));
+  const text = [`Recibo de pago - ${estudio}`, numero ? `Recibo N°: ${numeroRecibo(numero)}` : '', `Fecha: ${fecha(f)}`, `Recibimos de: ${cliente}`, `Concepto: ${concepto} (${periodo})`,
+    `Medio de pago: ${MEDIOS[medio] || medio}`, nota ? `Nota: ${nota}` : '', `Importe: ${pesos(monto)}`,
+    saldo > 0 ? `Saldo pendiente de este concepto: ${pesos(saldo)}` : 'Este concepto queda cancelado.', '', 'Este comprobante acredita el pago recibido. No reemplaza a la factura.', `\n${estudio}`].filter((l) => l !== '').join('\n');
+  return { html, text, subject: `Recibo de pago${numero ? ` ${numeroRecibo(numero)}` : ''} - ${estudio}` };
+}
+
 function prueba({ estudio }) {
   return {
     subject: `Prueba de correo - ${estudio}`,
@@ -111,4 +134,4 @@ function prueba({ estudio }) {
   };
 }
 
-module.exports = { LOGO_CID, resumenEquipo, recordatorioDeuda, recordatorioVencimientos, tareaAsignada, prueba, esc, pesos, fecha };
+module.exports = { LOGO_CID, recibo, numeroRecibo, resumenEquipo, recordatorioDeuda, recordatorioVencimientos, tareaAsignada, prueba, esc, pesos, fecha };

@@ -9,6 +9,7 @@ const { idsVisibles, puedeVerCliente, exigirCliente } = require('../servicios/ac
 const { honorarioSchema, honorarioCambiosSchema, pagoSchema } = require('../validacion');
 const { hoy, mapaClientes } = require('../util');
 const { honorarios, consultar, deudores, conEstado, redondear } = require('../servicios/honorarios');
+const { enviarRecibo } = require('../servicios/recibos');
 const { sumarFacturado, sumarCobrado, borrarHonorarios } = require('../servicios/resumenes');
 
 // Los cobros son una colección propia (no una subcolección) para poder sumarlos por fecha
@@ -111,13 +112,18 @@ router.post('/:id/pagos', async (req, res) => {
   if (!r.success) return errorValidacion(res, r.error);
   const ref = honorarios().doc(req.params.id);
   const pagoRef = pagos().doc();
-  const pago = { ...r.data, honorarioId: req.params.id, fecha: r.data.fecha ?? hoy(), registradoPor: req.usuario.id, creadoEn: new Date() };
+  const contadorRecibos = db.collection('contadores').doc('recibos');
+  const { enviarRecibo: quiereRecibo, ...datosPago } = r.data;
+  const pago = { ...datosPago, honorarioId: req.params.id, fecha: r.data.fecha ?? hoy(), registradoPor: req.usuario.id, creadoEn: new Date() };
   const resultado = await db.runTransaction(async (tx) => {
     const doc = await tx.get(ref);
     if (!doc.exists) return { status: 404, error: 'Honorario no encontrado' };
     const h = doc.data();
+    const contador = await tx.get(contadorRecibos);
     if (pago.monto > h.saldo + 0.001) return { status: 400, error: `El cobro (${pago.monto}) supera el saldo pendiente (${h.saldo})` };
     pago.clienteId = h.clienteId;
+    pago.numero = (contador.exists ? contador.data().ultimo : 0) + 1; // numeración correlativa de recibos
+    tx.set(contadorRecibos, { ultimo: pago.numero });
     const pagado = redondear(h.pagado + pago.monto);
     const cambios = { pagado, saldo: redondear(h.monto - pagado) };
     tx.set(pagoRef, pago);
@@ -126,7 +132,18 @@ router.post('/:id/pagos', async (req, res) => {
     return { ok: { id: doc.id, ...h, ...cambios } };
   });
   if (!resultado.ok) return res.status(resultado.status).json({ error: resultado.error });
-  res.status(201).json({ pago: { id: pagoRef.id, ...pago }, honorario: salida(resultado.ok, await mapaClientes()) });
+  // El recibo no puede hacer fallar el cobro: ya quedó registrado.
+  const cliente = (await todosLosClientes()).find((c) => c.id === resultado.ok.clienteId);
+  const recibo = quiereRecibo === false ? null : await enviarRecibo({ pago: { id: pagoRef.id, ...pago }, honorario: resultado.ok, cliente });
+  res.status(201).json({ pago: { id: pagoRef.id, ...pago }, honorario: salida(resultado.ok, await mapaClientes()), recibo });
+});
+
+// Reenviar el recibo de un cobro (por ejemplo, si el cliente cambió de email o no le llegó).
+router.post('/:id/pagos/:pid/recibo', async (req, res) => {
+  const [hDoc, pDoc] = await Promise.all([honorarios().doc(req.params.id).get(), pagos().doc(req.params.pid).get()]);
+  if (!hDoc.exists || !pDoc.exists || pDoc.data().honorarioId !== req.params.id) return res.status(404).json({ error: 'Cobro no encontrado' });
+  const cliente = (await todosLosClientes()).find((c) => c.id === hDoc.data().clienteId);
+  res.json({ recibo: await enviarRecibo({ pago: { id: pDoc.id, ...pDoc.data() }, honorario: { id: hDoc.id, ...hDoc.data() }, cliente, reenviar: true }) });
 });
 
 // Anular un cobro (por error de carga): solo administradores. Devuelve el saldo.

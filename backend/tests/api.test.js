@@ -1652,3 +1652,62 @@ describe('anticipos de personas jurídicas según el cierre', () => {
     }
   });
 });
+
+describe('recibo por email al cobrar', () => {
+  const correo = require('../src/correo/transporte');
+  const enviados = [];
+  let fallar = false;
+  const u = {};
+
+  beforeAll(async () => {
+    correo.usarTransporteDePrueba({ sendMail: async (m) => { if (fallar) throw new Error('SMTP caído'); enviados.push(m); } });
+    process.env.SMTP_USER = 'estudio@gmail.test';
+    const con = (await admin.post('/api/clientes').send({ razonSocial: 'Recibo & Cía <SA>', email: 'paga@cliente.test', estado: 'POTENCIAL' }).expect(201)).body;
+    const sin = (await admin.post('/api/clientes').send({ razonSocial: 'Sin Mail', estado: 'POTENCIAL' }).expect(201)).body;
+    const hon = async (clienteId, monto) => (await admin.post('/api/honorarios').send({ clienteId, periodo: '2026-10', concepto: 'Honorarios <mensuales>', monto }).expect(201)).body.id;
+    u.con = await hon(con.id, 10000); u.sin = await hon(sin.id, 5000); u.con2 = await hon(con.id, 3000);
+  });
+  afterAll(() => correo.usarTransporteDePrueba(null));
+
+  it('al registrar un cobro se envía el recibo numerado, con el saldo y el HTML escapado', async () => {
+    const r = (await admin.post(`/api/honorarios/${u.con}/pagos`).send({ monto: 4000, medio: 'EFECTIVO', nota: 'Pago parcial' }).expect(201)).body;
+    expect(r.recibo).toBe('enviado');
+    expect(r.pago.numero).toBeGreaterThan(0);
+    expect(enviados).toHaveLength(1);
+    const m = enviados[0];
+    expect(m.to).toBe('paga@cliente.test');
+    expect(m.subject).toMatch(/^Recibo de pago R-\d{8}/);
+    expect(m.html).toContain('Recibo &amp; Cía &lt;SA&gt;');
+    expect(m.html).toContain('Honorarios &lt;mensuales&gt;');
+    expect(m.text).toMatch(/Importe: .*4\.000,00/);
+    expect(m.text).toMatch(/Saldo pendiente de este concepto: .*6\.000,00/);
+    expect(m.text).toContain('No reemplaza a la factura');
+    expect(m.attachments[0].cid).toBe('logo-estudio'); // el logo viaja adjunto
+  });
+
+  it('la numeración es correlativa y el saldo en cero dice que el concepto queda cancelado', async () => {
+    const a = enviados[0].subject.match(/R-(\d{8})/)[1];
+    const r = (await admin.post(`/api/honorarios/${u.con}/pagos`).send({ monto: 6000 }).expect(201)).body;
+    expect(String(r.pago.numero).padStart(8, '0')).toBe(String(Number(a) + 1).padStart(8, '0'));
+    expect(enviados[1].text).toContain('Este concepto queda cancelado');
+  });
+
+  it('se puede no enviar, y un cliente sin email o con avisos apagados no recibe nada (el cobro igual se registra)', async () => {
+    const antes = enviados.length;
+    expect((await admin.post(`/api/honorarios/${u.con2}/pagos`).send({ monto: 1000, enviarRecibo: false }).expect(201)).body.recibo).toBeNull();
+    expect((await admin.post(`/api/honorarios/${u.sin}/pagos`).send({ monto: 1000 }).expect(201)).body.recibo).toBe('sin-email');
+    expect(enviados).toHaveLength(antes);
+  });
+
+  it('si el correo falla el cobro queda registrado; reenviar vuelve a mandarlo', async () => {
+    fallar = true;
+    const r = (await admin.post(`/api/honorarios/${u.con2}/pagos`).send({ monto: 500 }).expect(201)).body;
+    expect(r.recibo).toBe('error');
+    expect((await admin.get(`/api/honorarios/${u.con2}/pagos`).expect(200)).body).toHaveLength(2);
+    fallar = false;
+    const antes = enviados.length;
+    expect((await admin.post(`/api/honorarios/${u.con2}/pagos/${r.pago.id}/recibo`).expect(200)).body.recibo).toBe('enviado');
+    expect(enviados).toHaveLength(antes + 1);
+    await admin.post(`/api/honorarios/${u.con2}/pagos/no-existe/recibo`).expect(404);
+  });
+});
