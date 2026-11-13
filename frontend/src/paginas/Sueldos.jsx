@@ -80,7 +80,7 @@ export default function Sueldos() {
         <input type="month" className="campo !w-44" value={periodo} onChange={(e) => e.target.value && setPeriodo(e.target.value)} aria-label="Mes" />
       </div>
       <p className="text-sm text-machine">
-        Cada persona cobra un porcentaje de lo <strong>cobrado en el mes</strong> de los clientes que tiene asignados (si un cliente tiene varias personas, se reparte en partes iguales).
+        Cada persona cobra un porcentaje de lo <strong>cobrado en el mes</strong> de los clientes que tiene asignados (si un cliente tiene varias personas, se reparte en partes iguales). Los clientes sin nadie asignado son tuyos y no generan sueldo.
         El porcentaje de cada una se edita acá o en <Link className="enlace" to="/usuarios">Usuarios</Link>; la asignación de clientes, en la ficha del cliente o en Usuarios.
       </p>
       {error && <Alerta tipo="error">{error}</Alerta>}
@@ -93,7 +93,6 @@ export default function Sueldos() {
             <Dato titulo="Ganancia del estudio" valor={pesos(t.ganancia)} detalle="cobrado − sueldos que corresponden" destacado />
             <Dato titulo="Ganancia con lo pagado" valor={pesos(t.gananciaReal)} detalle="cobrado − sueldos pagados hasta hoy" />
           </div>
-          {t.sinAsignar > 0 && <p className="text-sm text-machine">{pesos(t.sinAsignar)} se cobraron de clientes sin nadie asignado: quedan íntegros para el estudio.</p>}
 
           <div className="overflow-x-auto panel-plano">
             <table className="w-full text-left text-sm">
@@ -131,6 +130,12 @@ export default function Sueldos() {
                     )}
                   </Fragment>
                 ))}
+                <tr className="bg-fondo">
+                  <td className="px-3 py-2 font-medium">Tus clientes (sin asignar)</td>
+                  <td className="px-3 py-2 text-machine">—</td>
+                  <td className="px-3 py-2 text-right">{pesos(t.sinAsignar)}</td>
+                  <td className="px-3 py-2 text-right text-machine" colSpan={4}>Los clientes sin nadie asignado se consideran tuyos: lo cobrado queda íntegro para el estudio, sin sueldo.</td>
+                </tr>
                 {r.filas.length === 0 && <tr><td colSpan={7} className="px-3 py-8 text-center text-machine">No hay personas en el equipo. Creá usuarios en <Link className="enlace" to="/usuarios">Usuarios</Link>.</td></tr>}
               </tbody>
             </table>
