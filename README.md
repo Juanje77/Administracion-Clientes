@@ -197,6 +197,10 @@ En la ficha de cada cliente: subir contratos, presupuestos, facturas, constancia
 - Sin `FIREBASE_STORAGE_BUCKET` el resto del sistema funciona y la sección Documentos avisa qué falta.
 
 ## Inicio (dashboard) y exportaciones
+
+**Estado del estudio (solo administradores):** al abrir *Inicio*, el titular ve primero el tablero con el estado actual: resultado del período (facturado, cobrado y % de cobranza, sueldos que corresponden y ganancia, antes de gastos),
+deuda por antigüedad (mes actual, 1, 2 y 3 meses o más de atraso), trabajo pendiente (vencimientos vencidos, de hoy y de los próximos 7 días; tareas sin responsable), una tabla del equipo (clientes activos, tareas pendientes y vencidas,
+cobrado de sus clientes y sueldo del mes) y **datos para completar** (clientes activos sin email, sin CUIT, sin obligaciones, sin abono, sociedades sin mes de cierre, con enlaces para corregirlos). Los demás usuarios ven el Inicio de siempre.
 - **Inicio** muestra, para el mes elegido: lo cobrado (cifra principal) y lo facturado, la deuda total, clientes activos y nuevos,
   pendientes urgentes, un gráfico de **cobrado por mes** (últimos 6 meses, con tooltip y vista de tabla) y los 5 mayores deudores.
   Los totales de facturado y cobrado salen de `resumenes/{AAAA-MM}`, documentos que se actualizan solos con cada honorario y cada cobro: el Inicio lee 6 documentos

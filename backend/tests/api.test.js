@@ -1784,3 +1784,47 @@ describe('sueldos del equipo', () => {
     expect((await admin.get('/api/sueldos?periodo=2031-05').expect(200)).body.totales).toMatchObject({ cobrado: 0, sueldos: 0, pagado: 0 });
   });
 });
+
+describe('estado del estudio (Inicio)', () => {
+  const { hoy, sumarDias } = require('../src/util');
+  const mes = '2032-06'; // período propio: los demás tests también cargan honorarios en el mes actual
+  const u = {};
+
+  beforeAll(async () => {
+    u.eva = (await admin.post('/api/usuarios').send({ nombre: 'Eva Estado', email: 'eva@t.com', password: 'clave12345', accesoClientes: 'TODOS', porcentajeSueldo: 20 }).expect(201)).body.id;
+    const cli = async (extra) => (await admin.post('/api/clientes').send({ estado: 'POTENCIAL', ...extra }).expect(201)).body.id;
+    u.a = await cli({ razonSocial: 'Estado A', responsables: [u.eva], email: 'a@x.com' });
+    u.b = await cli({ razonSocial: 'Estado B' });
+    const hon = async (clienteId, periodo, monto, cobrar = 0) => {
+      const h = (await admin.post('/api/honorarios').send({ clienteId, periodo, concepto: 'Honorarios', monto }).expect(201)).body.id;
+      if (cobrar) await admin.post(`/api/honorarios/${h}/pagos`).send({ monto: cobrar, enviarRecibo: false }).expect(201);
+    };
+    await hon(u.a, mes, 100000, 60000);
+    await hon(u.b, mes, 50000);
+    await hon(u.b, '2020-01', 10000); // deuda vieja: tramo "3 meses o más"
+    await admin.post('/api/tareas').send({ titulo: 'Vencida de Eva', vence: sumarDias(hoy(), -3), asignadoA: u.eva }).expect(201);
+    await admin.post('/api/tareas').send({ titulo: 'Futura de Eva', vence: sumarDias(hoy(), 20), asignadoA: u.eva }).expect(201);
+  });
+
+  it('solo lo ven los administradores', async () => {
+    await user.get('/api/dashboard/estudio').expect(403);
+    await admin.get('/api/dashboard/estudio?periodo=2026-13').expect(400);
+  });
+
+  it('resume resultado del mes, deuda por antigüedad, equipo y datos por completar', async () => {
+    const r = (await admin.get(`/api/dashboard/estudio?periodo=${mes}`).expect(200)).body;
+    expect(r.resultado).toMatchObject({ facturado: 150000, cobrado: 60000, falta: 90000, cobranza: 40, sueldos: 12000, ganancia: 48000 }); // 20 % de 60.000 para Eva
+    const tr = Object.fromEntries(r.deuda.tramos.map((t) => [t.clave, t]));
+    expect(tr.mes.saldo).toBeGreaterThanOrEqual(90000); // la deuda es de todo el estudio: otros tests también dejan saldos
+    expect(tr['3'].saldo).toBeGreaterThanOrEqual(10000);
+    expect(r.deuda.total).toBeGreaterThanOrEqual(100000);
+    expect(r.deuda.total).toBe(r.deuda.tramos.reduce((t, x) => t + x.saldo, 0));
+    const eva = r.equipo.find((p) => p.id === u.eva);
+    expect(eva).toMatchObject({ admin: false, clientes: 0, pendientes: 2, vencidas: 1, cobrado: 60000, sueldo: 12000 });
+    expect(r.equipo.find((p) => p.admin)).toMatchObject({ sueldo: null }); // el titular no cobra sueldo
+    expect(r.vencimientos).toMatchObject({ vencidos: expect.any(Number), hoy: expect.any(Number), proximos: expect.any(Number) });
+    expect(r.cartera.total).toBeGreaterThan(1);
+    expect(r.faltan.sinEmail.cantidad).toBeGreaterThanOrEqual(0);
+    expect(r.faltan.sociedadesSinCierre).toHaveProperty('ejemplos');
+  });
+});

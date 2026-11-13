@@ -7,6 +7,7 @@ const { resumenAlertas } = require('../servicios/alertas');
 const { deudores, mesActual } = require('../servicios/honorarios');
 const { leerSerie, asegurarResumenes, recalcular } = require('../servicios/resumenes');
 const { periodo: periodoSchema } = require('../validacion');
+const { estadoEstudio } = require('../servicios/estudio');
 
 // ["2026-05", ..., "2026-10"] terminando en `hasta`
 function ultimosMeses(hasta, n) {
@@ -66,6 +67,13 @@ router.get('/', async (req, res) => {
     serie,
     agenda,
   });
+});
+
+// Estado actual del estudio: resultado del mes, deuda por antigüedad, equipo, vencimientos y datos por completar (solo administradores).
+router.get('/estudio', requiereAdmin, async (req, res) => {
+  const p = periodoSchema.safeParse(req.query.periodo ?? mesActual());
+  if (!p.success) return res.status(400).json({ error: 'Período inválido (AAAA-MM)' });
+  res.json(await estadoEstudio(p.data, req.usuario));
 });
 
 // Reconstruye los totales mensuales desde los honorarios y cobros existentes (por si algo quedó desfasado).

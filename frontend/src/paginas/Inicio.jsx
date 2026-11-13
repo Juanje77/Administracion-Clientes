@@ -7,6 +7,7 @@ import { nombrePeriodo } from '../fechas';
 import GraficoMeses from '../componentes/GraficoMeses';
 import Alerta from '../componentes/Alerta';
 import Dato from '../componentes/Dato';
+import EstadoEstudio from '../componentes/EstadoEstudio';
 
 export default function Inicio() {
   const { usuario } = useAuth();
@@ -48,8 +49,11 @@ export default function Inicio() {
             </div>
           )}
 
+          {/* El titular ve el estado completo del estudio (incluye el resultado del mes) */}
+          {usuario.rol === 'ADMIN' && <EstadoEstudio periodo={periodo} />}
+
           {/* Una sola cifra protagonista: lo cobrado en el período (solo para quien tiene acceso a los montos) */}
-          {d.dinero && (
+          {d.dinero && usuario.rol !== 'ADMIN' && (
             <section>
               <p className="tecnica text-[12px] text-machine">Cobrado en {nombrePeriodo(d.periodo)}</p>
               <p className="mt-3 break-words font-tecnica text-[44px] font-normal leading-none tracking-[-0.03em] text-figure sm:text-[72px] lg:text-[96px]">{valor(d.honorarios.cobrado)}</p>
