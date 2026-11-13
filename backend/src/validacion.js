@@ -73,9 +73,11 @@ const usuarioSchema = z.object({
   verDinero: z.boolean().default(false),
   // 'ASIGNADOS': solo ve los clientes que se le asignen (por defecto en usuarios nuevos). 'TODOS': ve todos.
   accesoClientes: z.enum(['TODOS', 'ASIGNADOS']).default('ASIGNADOS'),
+  // % de lo cobrado de sus clientes que se le paga como sueldo (ver Sueldos).
+  porcentajeSueldo: z.coerce.number().min(0).max(100).default(0),
 });
 
-const usuarioCambiosSchema = z.object({ activo: z.boolean().optional(), verDinero: z.boolean().optional(), accesoClientes: z.enum(['TODOS', 'ASIGNADOS']).optional() })
+const usuarioCambiosSchema = z.object({ activo: z.boolean().optional(), verDinero: z.boolean().optional(), accesoClientes: z.enum(['TODOS', 'ASIGNADOS']).optional(), porcentajeSueldo: z.coerce.number().min(0).max(100).optional() })
   .refine((c) => Object.values(c).some((v) => v !== undefined), 'Nada para cambiar');
 
 // Fecha "AAAA-MM-DD" que exista de verdad (rechaza 2026-02-31).
@@ -146,6 +148,15 @@ const pagoSchema = z.object({
   enviarRecibo: z.boolean().optional(),
 });
 
+// Pago de sueldo a una persona del equipo (puede ser parcial o un adelanto).
+const pagoSueldoSchema = z.object({
+  usuarioId: z.string().min(1),
+  periodo,
+  monto,
+  fecha: fecha.optional(),
+  nota: opcional(z.string().trim().max(300)),
+});
+
 const CATEGORIAS_DOC = ['CONTRATO', 'PRESUPUESTO', 'FACTURA', 'CONSTANCIA', 'BALANCE', 'OTRO'];
 
 const avisosConfigSchema = z.object({
@@ -165,5 +176,5 @@ const passwordSchema = z.object({
 module.exports = {
   cuitValido, clienteSchema, interaccionSchema, usuarioSchema, usuarioCambiosSchema,
   tareaSchema, tareaCambiosSchema, vencimientoSchema, calendarioSchema, passwordSchema, periodo,
-  honorarioSchema, honorarioCambiosSchema, pagoSchema, CATEGORIAS_DOC, avisosConfigSchema,
+  honorarioSchema, honorarioCambiosSchema, pagoSchema, pagoSueldoSchema, CATEGORIAS_DOC, avisosConfigSchema,
 };

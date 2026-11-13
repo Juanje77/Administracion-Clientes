@@ -1711,3 +1711,66 @@ describe('recibo por email al cobrar', () => {
     await admin.post(`/api/honorarios/${u.con2}/pagos/no-existe/recibo`).expect(404);
   });
 });
+
+describe('sueldos del equipo', () => {
+  const u = {};
+  const periodo = '2031-03';
+
+  beforeAll(async () => {
+    const mk = async (nombre, email, extra = {}) => (await admin.post('/api/usuarios').send({ nombre, email, password: 'clave12345', accesoClientes: 'TODOS', ...extra }).expect(201)).body;
+    u.sol = (await mk('Sol Sueldo', 'sol@t.com', { porcentajeSueldo: 30 })).id;
+    u.teo = (await mk('Teo Sueldo', 'teo@t.com')).id; // sin % cargado todavía
+    const cli = async (nombre, responsables) => (await admin.post('/api/clientes').send({ razonSocial: nombre, estado: 'POTENCIAL', responsables }).expect(201)).body.id;
+    u.a = await cli('Sueldo A', [u.sol]);
+    u.b = await cli('Sueldo B', [u.sol, u.teo]); // compartido
+    u.c = await cli('Sueldo C', []); // sin responsable
+    const cobrar = async (clienteId, monto, fecha) => {
+      const h = (await admin.post('/api/honorarios').send({ clienteId, periodo, concepto: 'Honorarios', monto }).expect(201)).body.id;
+      await admin.post(`/api/honorarios/${h}/pagos`).send({ monto, fecha, enviarRecibo: false }).expect(201);
+    };
+    await cobrar(u.a, 100000, `${periodo}-05`);
+    await cobrar(u.b, 40000, `${periodo}-10`);
+    await cobrar(u.c, 20000, `${periodo}-15`);
+    await cobrar(u.a, 7777, '2031-04-02'); // otro mes: no cuenta
+  });
+
+  it('solo los administradores lo ven', async () => {
+    await user.get(`/api/sueldos?periodo=${periodo}`).expect(403);
+    await user.post('/api/sueldos/pagos').send({ usuarioId: u.sol, periodo, monto: 1 }).expect(403);
+  });
+
+  it('calcula el % sobre lo cobrado de los clientes asignados (repartido si es compartido) y la ganancia', async () => {
+    const r = (await admin.get(`/api/sueldos?periodo=${periodo}`).expect(200)).body;
+    const sol = r.filas.find((f) => f.usuarioId === u.sol);
+    const teo = r.filas.find((f) => f.usuarioId === u.teo);
+    expect(sol).toMatchObject({ porcentaje: 30, base: 120000, corresponde: 36000, pagado: 0, pendiente: 36000 }); // 100.000 + la mitad de 40.000
+    expect(teo).toMatchObject({ porcentaje: 0, base: 20000, corresponde: 0 });
+    expect(r.filas.some((f) => f.nombre === 'Admin')).toBe(false); // el administrador no cobra sueldo
+    expect(r.totales).toMatchObject({ cobrado: 160000, sinAsignar: 20000, sueldos: 36000, pagado: 0, ganancia: 124000, gananciaReal: 160000 });
+    // cambiar el % se refleja enseguida
+    await admin.patch(`/api/usuarios/${u.teo}`).send({ porcentajeSueldo: 10 }).expect(200);
+    const r2 = (await admin.get(`/api/sueldos?periodo=${periodo}`).expect(200)).body;
+    expect(r2.filas.find((f) => f.usuarioId === u.teo)).toMatchObject({ corresponde: 2000 });
+    expect(r2.totales).toMatchObject({ sueldos: 38000, ganancia: 122000 });
+    await admin.patch(`/api/usuarios/${u.teo}`).send({ porcentajeSueldo: 101 }).expect(400);
+  });
+
+  it('registra pagos (parciales o adelantos), actualiza lo pendiente y la ganancia real, y permite anularlos', async () => {
+    const p1 = (await admin.post('/api/sueldos/pagos').send({ usuarioId: u.sol, periodo, monto: 20000, fecha: `${periodo}-20`, nota: 'Adelanto' }).expect(201)).body;
+    expect(p1.resumen.filas.find((f) => f.usuarioId === u.sol)).toMatchObject({ pagado: 20000, pendiente: 16000 });
+    expect(p1.resumen.totales).toMatchObject({ pagado: 20000, gananciaReal: 140000 });
+    const p2 = (await admin.post('/api/sueldos/pagos').send({ usuarioId: u.sol, periodo, monto: 16000 }).expect(201)).body;
+    expect(p2.resumen.filas.find((f) => f.usuarioId === u.sol).pendiente).toBe(0);
+    expect((await admin.get(`/api/sueldos?periodo=${periodo}`).expect(200)).body.filas.find((f) => f.usuarioId === u.sol).pagos).toHaveLength(2);
+    // validaciones
+    await admin.post('/api/sueldos/pagos').send({ usuarioId: u.sol, periodo, monto: 0 }).expect(400);
+    await admin.post('/api/sueldos/pagos').send({ usuarioId: 'no-existe', periodo, monto: 5 }).expect(400);
+    await admin.get('/api/sueldos?periodo=2031-13').expect(400);
+    // anular
+    await admin.delete(`/api/sueldos/pagos/${p1.pago.id}`).expect(204);
+    expect((await admin.get(`/api/sueldos?periodo=${periodo}`).expect(200)).body.filas.find((f) => f.usuarioId === u.sol)).toMatchObject({ pagado: 16000, pendiente: 20000 });
+    await admin.delete(`/api/sueldos/pagos/${p1.pago.id}`).expect(404);
+    // otro mes no tiene nada
+    expect((await admin.get('/api/sueldos?periodo=2031-05').expect(200)).body.totales).toMatchObject({ cobrado: 0, sueldos: 0, pagado: 0 });
+  });
+});

@@ -65,7 +65,7 @@ function AsignarClientes({ usuario, cerrar, alGuardar }) {
 
 export default function Usuarios() {
   const [lista, setLista] = useState([]);
-  const [f, setF] = useState({ nombre: '', email: '', password: '', rol: 'USUARIO', verDinero: false, accesoClientes: 'ASIGNADOS' });
+  const [f, setF] = useState({ nombre: '', email: '', password: '', rol: 'USUARIO', verDinero: false, accesoClientes: 'ASIGNADOS', porcentajeSueldo: '' });
   const [error, setError] = useState('');
   const [asignando, setAsignando] = useState(null);
 
@@ -77,7 +77,7 @@ export default function Usuarios() {
     setError('');
     try {
       await api('/usuarios', { metodo: 'POST', cuerpo: f });
-      setF({ nombre: '', email: '', password: '', rol: 'USUARIO', verDinero: false, accesoClientes: 'ASIGNADOS' });
+      setF({ nombre: '', email: '', password: '', rol: 'USUARIO', verDinero: false, accesoClientes: 'ASIGNADOS', porcentajeSueldo: '' });
       cargar();
     } catch (ex) {
       const detalle = ex instanceof ErrorApi ? Object.values(ex.detalles).flat().join(' ') : '';
@@ -118,6 +118,11 @@ export default function Usuarios() {
               {f.rol === 'ADMIN' ? 'Los administradores ven y gestionan todo, incluido el dinero.' : 'Por defecto no ve nada de dinero: solo clientes, tareas, agenda, calendario y documentos.'}
             </span>
           </span>
+        </label>
+        <label className="flex flex-wrap items-center gap-2 text-sm sm:col-span-5">
+          Sueldo: % de lo cobrado de sus clientes
+          <input className="campo !w-20 text-right" type="number" min="0" max="100" step="0.5" placeholder="0" disabled={f.rol === 'ADMIN'} value={f.rol === 'ADMIN' ? '' : f.porcentajeSueldo} onChange={(e) => setF({ ...f, porcentajeSueldo: e.target.value })} aria-label="Porcentaje de sueldo" />
+          <span className="text-xs text-machine">Se usa en la sección Sueldos (podés cambiarlo cuando quieras).</span>
         </label>
         <label className="flex flex-wrap items-center gap-2 text-sm sm:col-span-5">
           Clientes que verá

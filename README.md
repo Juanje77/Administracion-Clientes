@@ -139,6 +139,15 @@ Para quien tiene acceso limitado, un cliente ajeno **no existe** (404) en todo e
 - Generar los honorarios del mes y aplicar el calendario requieren ver todos los clientes. Los totales del estudio en el Inicio (facturado, cobrado, deuda total) tampoco se muestran a quien ve solo algunos clientes; en Honorarios ve lo de sus clientes.
 - Los cambios de acceso valen desde la siguiente petición de esa persona.
 
+## Sueldos y ganancia del estudio (solo administradores)
+
+Sección **Sueldos**: cada persona del equipo (no administradora) tiene un **porcentaje** (se edita en la propia sección o en *Usuarios*) que se aplica sobre **lo cobrado en el mes de los clientes que tiene asignados**
+(`responsables` del cliente). Si un cliente tiene varias personas asignadas, lo cobrado se reparte en partes iguales; lo cobrado de clientes sin nadie asignado queda para el estudio.
+
+Para cada mes se ve: cobrado total, sueldos que corresponden, ganancia del estudio (cobrado − sueldos que corresponden) y ganancia con lo efectivamente pagado. En cada persona se **registran los pagos** de sueldo
+(parciales o adelantos, con fecha y nota) y se pueden anular. Los pagos se guardan en la colección `sueldoPagos`. Si cambiás un porcentaje, el "corresponde" de meses pasados se recalcula; lo ya pagado no cambia.
+Los gastos del estudio (alquiler, impuestos, etc.) no se descuentan: la ganancia es antes de ellos.
+
 ## Roles
 - **Administrador:** gestiona usuarios y puede eliminar clientes definitivamente.
 - **Usuario:** opera clientes e interacciones. "Eliminar" archiva (estado Inactivo).
