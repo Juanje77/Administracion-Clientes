@@ -144,7 +144,7 @@ Para quien tiene acceso limitado, un cliente ajeno **no existe** (404) en todo e
 Sección **Sueldos**: cada persona del equipo (no administradora) tiene un **porcentaje** (se edita en la propia sección o en *Usuarios*) que se aplica sobre **lo cobrado en el mes de los clientes que tiene asignados**
 (`responsables` del cliente). Si un cliente tiene varias personas asignadas, lo cobrado se reparte en partes iguales; los clientes sin nadie asignado se consideran del titular (los atiende él solo): lo cobrado de ellos queda íntegro para el estudio y se muestra en una fila aparte.
 
-Para cada mes se ve: cobrado total, sueldos que corresponden, ganancia del estudio (cobrado − sueldos que corresponden) y ganancia con lo efectivamente pagado. En cada persona se **registran los pagos** de sueldo
+Para cada mes se ve: cobrado total, **el detalle de los cobros que lo componen** (fecha, cliente, concepto, a quién se atribuye; filtrable por persona), sueldos que corresponden, ganancia del estudio (cobrado − sueldos que corresponden) y ganancia con lo efectivamente pagado. En cada persona se **registran los pagos** de sueldo
 (parciales o adelantos, con fecha y nota) y se pueden anular. Los pagos se guardan en la colección `sueldoPagos`. Si cambiás un porcentaje, el "corresponde" de meses pasados se recalcula; lo ya pagado no cambia.
 Los gastos del estudio (alquiler, impuestos, etc.) no se descuentan: la ganancia es antes de ellos.
 

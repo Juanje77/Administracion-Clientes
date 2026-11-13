@@ -62,6 +62,7 @@ export default function Sueldos() {
   const [r, setR] = useState(null);
   const [error, setError] = useState('');
   const [abierto, setAbierto] = useState(null); // usuarioId con el formulario de pago abierto
+  const [filtro, setFiltro] = useState(''); // '' = todos | 'titular' | usuarioId
 
   const cargar = () => api(`/sueldos?periodo=${periodo}`).then((d) => { setR(d); setError(''); }).catch((e) => setError(e.message));
   useEffect(() => { cargar(); }, [periodo]);
@@ -140,6 +141,42 @@ export default function Sueldos() {
               </tbody>
             </table>
           </div>
+          <section className="space-y-3">
+            <div className="flex flex-wrap items-end justify-between gap-2">
+              <h2 className="titulo-seccion">De qué se compone lo cobrado</h2>
+              <select className="campo !w-60" value={filtro} onChange={(e) => setFiltro(e.target.value)} aria-label="Filtrar por persona">
+                <option value="">Todos los cobros</option>
+                <option value="titular">Tus clientes (sin asignar)</option>
+                {r.filas.map((f) => <option key={f.usuarioId} value={f.usuarioId}>Clientes de {f.nombre}</option>)}
+              </select>
+            </div>
+            {(() => {
+              const lista = r.cobros.filter((c) => !filtro || (filtro === 'titular' ? c.asignadoA.length === 0 : c.asignadoA.some((x) => x.id === filtro)));
+              const total = lista.reduce((s, c) => s + c.monto, 0);
+              return (
+                <div className="overflow-x-auto panel-plano">
+                  <table className="w-full text-left text-sm">
+                    <thead className="encabezado-tabla">
+                      <tr><th className="px-3 py-2">Fecha</th><th className="px-3 py-2">Cliente</th><th className="px-3 py-2">Concepto</th><th className="px-3 py-2">Atribuido a</th><th className="px-3 py-2 text-right">Monto</th></tr>
+                    </thead>
+                    <tbody className="divide-y">
+                      {lista.map((c) => (
+                        <tr key={c.id}>
+                          <td className="whitespace-nowrap px-3 py-2 text-machine">{verFecha(c.fecha)}</td>
+                          <td className="px-3 py-2"><Link className="enlace" to={`/clientes/${c.clienteId}`}>{c.cliente}</Link></td>
+                          <td className="px-3 py-2 text-machine">{c.concepto || '—'}</td>
+                          <td className="px-3 py-2">{c.asignadoA.length ? c.asignadoA.map((x) => x.nombre).join(', ') + (c.asignadoA.length > 1 ? ' (en partes iguales)' : '') : <span className="text-machine">Titular</span>}</td>
+                          <td className="px-3 py-2 text-right font-medium">{pesos(c.monto)}</td>
+                        </tr>
+                      ))}
+                      {lista.length === 0 && <tr><td colSpan={5} className="px-3 py-6 text-center text-machine">No hay cobros registrados en este mes.</td></tr>}
+                    </tbody>
+                    {lista.length > 0 && <tfoot><tr className="border-t border-figure"><td className="px-3 py-2 font-medium" colSpan={4}>Total ({lista.length} {lista.length === 1 ? 'cobro' : 'cobros'})</td><td className="px-3 py-2 text-right font-medium">{pesos(total)}</td></tr></tfoot>}
+                  </table>
+                </div>
+              );
+            })()}
+          </section>
           <p className="text-xs text-machine">Si cambiás el porcentaje de una persona, el “corresponde” de meses anteriores se recalcula con el nuevo valor; lo que ya registraste como pagado no cambia.</p>
         </>
       )}

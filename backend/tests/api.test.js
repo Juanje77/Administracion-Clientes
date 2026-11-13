@@ -1747,6 +1747,13 @@ describe('sueldos del equipo', () => {
     expect(teo).toMatchObject({ porcentaje: 0, base: 20000, corresponde: 0 });
     expect(r.filas.some((f) => f.nombre === 'Admin')).toBe(false); // el administrador no cobra sueldo
     expect(r.totales).toMatchObject({ cobrado: 160000, sinAsignar: 20000, sueldos: 36000, pagado: 0, ganancia: 124000, gananciaReal: 160000 });
+    // detalle de lo cobrado: cada cobro con su cliente, concepto y a quién se atribuye
+    expect(r.cobros).toHaveLength(3);
+    expect(r.cobros.reduce((t, c) => t + c.monto, 0)).toBe(160000);
+    const cb = r.cobros.find((c) => c.cliente === 'Sueldo B');
+    expect(cb).toMatchObject({ monto: 40000, fecha: `${periodo}-10`, concepto: `Honorarios · ${periodo}` });
+    expect(cb.asignadoA.map((x) => x.nombre).sort()).toEqual(['Sol Sueldo', 'Teo Sueldo']);
+    expect(r.cobros.find((c) => c.cliente === 'Sueldo C').asignadoA).toEqual([]);
     // cambiar el % se refleja enseguida
     await admin.patch(`/api/usuarios/${u.teo}`).send({ porcentajeSueldo: 10 }).expect(200);
     const r2 = (await admin.get(`/api/sueldos?periodo=${periodo}`).expect(200)).body;
