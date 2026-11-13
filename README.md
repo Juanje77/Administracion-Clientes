@@ -141,12 +141,13 @@ Para quien tiene acceso limitado, un cliente ajeno **no existe** (404) en todo e
 
 ## Sueldos y ganancia del estudio (solo administradores)
 
-Sección **Sueldos**: cada persona del equipo (no administradora) tiene un **porcentaje** (se edita en la propia sección o en *Usuarios*) que se aplica sobre **lo cobrado en el mes de los clientes que tiene asignados**
-(`responsables` del cliente). Si un cliente tiene varias personas asignadas, lo cobrado se reparte en partes iguales; los clientes sin nadie asignado se consideran del titular (los atiende él solo): lo cobrado de ellos queda íntegro para el estudio y se muestra en una fila aparte.
+Sección **Sueldos**: cada persona del equipo (no administradora) tiene un **porcentaje** (se edita en la propia sección o en *Usuarios*) que se aplica sobre **lo cobrado de los honorarios del mes (devengado)** de los clientes que tiene asignados
+(`responsables` del cliente). Cuenta el **período del honorario**, no la fecha del cobro: lo devengado en octubre que el cliente paga a principios de noviembre sigue siendo de octubre (y se va sumando a medida que se cobra).
+Si un cliente tiene varias personas asignadas, lo cobrado se reparte en partes iguales; los clientes sin nadie asignado se consideran del titular (los atiende él solo): lo cobrado de ellos queda íntegro para el estudio y se muestra en una fila aparte.
 
-Para cada mes se ve: cobrado total, **el detalle de los cobros que lo componen** (fecha, cliente, concepto, a quién se atribuye; filtrable por persona), sueldos que corresponden, ganancia del estudio (cobrado − sueldos que corresponden) y ganancia con lo efectivamente pagado. En cada persona se **registran los pagos** de sueldo
-(parciales o adelantos, con fecha y nota) y se pueden anular. Los pagos se guardan en la colección `sueldoPagos`. Si cambiás un porcentaje, el "corresponde" de meses pasados se recalcula; lo ya pagado no cambia.
-Los gastos del estudio (alquiler, impuestos, etc.) no se descuentan: la ganancia es antes de ellos.
+Para cada mes se ve: facturado, cobrado y lo que falta cobrar, sueldos que corresponden, ganancia del estudio (cobrado − sueldos que corresponden) y ganancia con lo efectivamente pagado. Debajo, **el detalle de los honorarios que componen el cobrado**
+(cliente, concepto, facturado, cobrado, cuándo se cobró y a quién se atribuye; filtrable por persona). En cada persona se **registran los pagos** de sueldo (parciales o adelantos, con fecha y nota) y se pueden anular; se guardan en la colección `sueldoPagos`.
+Si cambiás un porcentaje, el "corresponde" de meses pasados se recalcula; lo ya pagado no cambia. Los gastos del estudio (alquiler, impuestos, etc.) no se descuentan: la ganancia es antes de ellos.
 
 ## Roles
 - **Administrador:** gestiona usuarios y puede eliminar clientes definitivamente.

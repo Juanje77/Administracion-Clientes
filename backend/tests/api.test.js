@@ -1724,14 +1724,15 @@ describe('sueldos del equipo', () => {
     u.a = await cli('Sueldo A', [u.sol]);
     u.b = await cli('Sueldo B', [u.sol, u.teo]); // compartido
     u.c = await cli('Sueldo C', []); // sin responsable
-    const cobrar = async (clienteId, monto, fecha) => {
-      const h = (await admin.post('/api/honorarios').send({ clienteId, periodo, concepto: 'Honorarios', monto }).expect(201)).body.id;
-      await admin.post(`/api/honorarios/${h}/pagos`).send({ monto, fecha, enviarRecibo: false }).expect(201);
+    const cobrar = async (clienteId, monto, fecha, per = periodo, facturado = monto) => {
+      const h = (await admin.post('/api/honorarios').send({ clienteId, periodo: per, concepto: 'Honorarios', monto: facturado }).expect(201)).body.id;
+      if (monto > 0) await admin.post(`/api/honorarios/${h}/pagos`).send({ monto, fecha, enviarRecibo: false }).expect(201);
     };
     await cobrar(u.a, 100000, `${periodo}-05`);
-    await cobrar(u.b, 40000, `${periodo}-10`);
+    await cobrar(u.b, 40000, '2031-04-03'); // lo devengado en marzo, pagado a principios de abril: cuenta en marzo
     await cobrar(u.c, 20000, `${periodo}-15`);
-    await cobrar(u.a, 7777, '2031-04-02'); // otro mes: no cuenta
+    await cobrar(u.a, 7777, '2031-04-02', '2031-04'); // devengado en abril: no cuenta en marzo
+    await cobrar(u.c, 0, null, periodo, 5000); // facturado en marzo y todavía sin cobrar
   });
 
   it('solo los administradores lo ven', async () => {
@@ -1746,14 +1747,16 @@ describe('sueldos del equipo', () => {
     expect(sol).toMatchObject({ porcentaje: 30, base: 120000, corresponde: 36000, pagado: 0, pendiente: 36000 }); // 100.000 + la mitad de 40.000
     expect(teo).toMatchObject({ porcentaje: 0, base: 20000, corresponde: 0 });
     expect(r.filas.some((f) => f.nombre === 'Admin')).toBe(false); // el administrador no cobra sueldo
-    expect(r.totales).toMatchObject({ cobrado: 160000, sinAsignar: 20000, sueldos: 36000, pagado: 0, ganancia: 124000, gananciaReal: 160000 });
-    // detalle de lo cobrado: cada cobro con su cliente, concepto y a quién se atribuye
-    expect(r.cobros).toHaveLength(3);
-    expect(r.cobros.reduce((t, c) => t + c.monto, 0)).toBe(160000);
+    expect(r.totales).toMatchObject({ facturado: 165000, cobrado: 160000, falta: 5000, sinAsignar: 20000, sueldos: 36000, pagado: 0, ganancia: 124000, gananciaReal: 160000 });
+    // detalle: los honorarios del mes con lo cobrado de cada uno, cuándo y a quién se atribuye
+    expect(r.cobros).toHaveLength(4);
+    expect(r.cobros.reduce((t, c) => t + c.cobrado, 0)).toBe(160000);
     const cb = r.cobros.find((c) => c.cliente === 'Sueldo B');
-    expect(cb).toMatchObject({ monto: 40000, fecha: `${periodo}-10`, concepto: `Honorarios · ${periodo}` });
+    expect(cb).toMatchObject({ facturado: 40000, cobrado: 40000, saldo: 0, concepto: 'Honorarios' });
+    expect(cb.cobradoEn).toEqual([{ fecha: '2031-04-03', monto: 40000 }]);
     expect(cb.asignadoA.map((x) => x.nombre).sort()).toEqual(['Sol Sueldo', 'Teo Sueldo']);
-    expect(r.cobros.find((c) => c.cliente === 'Sueldo C').asignadoA).toEqual([]);
+    expect(r.cobros.filter((c) => c.cliente === 'Sueldo C').every((c) => c.asignadoA.length === 0)).toBe(true);
+    expect(r.cobros.find((c) => c.cliente === 'Sueldo C' && c.saldo === 5000).cobrado).toBe(0);
     // cambiar el % se refleja enseguida
     await admin.patch(`/api/usuarios/${u.teo}`).send({ porcentajeSueldo: 10 }).expect(200);
     const r2 = (await admin.get(`/api/sueldos?periodo=${periodo}`).expect(200)).body;

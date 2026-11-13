@@ -81,7 +81,8 @@ export default function Sueldos() {
         <input type="month" className="campo !w-44" value={periodo} onChange={(e) => e.target.value && setPeriodo(e.target.value)} aria-label="Mes" />
       </div>
       <p className="text-sm text-machine">
-        Cada persona cobra un porcentaje de lo <strong>cobrado en el mes</strong> de los clientes que tiene asignados (si un cliente tiene varias personas, se reparte en partes iguales). Los clientes sin nadie asignado son tuyos y no generan sueldo.
+        Cada persona cobra un porcentaje de lo <strong>cobrado de los honorarios del mes</strong> (devengado) de los clientes que tiene asignados, aunque el cliente pague a principios del mes siguiente
+        (si un cliente tiene varias personas, se reparte en partes iguales). Los clientes sin nadie asignado son tuyos y no generan sueldo.
         El porcentaje de cada una se edita acá o en <Link className="enlace" to="/usuarios">Usuarios</Link>; la asignación de clientes, en la ficha del cliente o en Usuarios.
       </p>
       {error && <Alerta tipo="error">{error}</Alerta>}
@@ -89,7 +90,7 @@ export default function Sueldos() {
       {t && (
         <>
           <div className="grid grid-cols-2 gap-x-8 lg:grid-cols-4">
-            <Dato titulo="Cobrado del mes" valor={pesos(t.cobrado)} destacado />
+            <Dato titulo="Cobrado del mes" valor={pesos(t.cobrado)} detalle={`de ${pesos(t.facturado)} facturados · falta cobrar ${pesos(t.falta)}`} destacado />
             <Dato titulo="Sueldos que corresponden" valor={pesos(t.sueldos)} detalle={`pagado ${pesos(t.pagado)} · pendiente ${pesos(t.pendiente)}`} destacado />
             <Dato titulo="Ganancia del estudio" valor={pesos(t.ganancia)} detalle="cobrado − sueldos que corresponden" destacado />
             <Dato titulo="Ganancia con lo pagado" valor={pesos(t.gananciaReal)} detalle="cobrado − sueldos pagados hasta hoy" />
@@ -143,7 +144,7 @@ export default function Sueldos() {
           </div>
           <section className="space-y-3">
             <div className="flex flex-wrap items-end justify-between gap-2">
-              <h2 className="titulo-seccion">De qué se compone lo cobrado</h2>
+              <h2 className="titulo-seccion">De qué se compone lo cobrado (honorarios del mes)</h2>
               <select className="campo !w-60" value={filtro} onChange={(e) => setFiltro(e.target.value)} aria-label="Filtrar por persona">
                 <option value="">Todos los cobros</option>
                 <option value="titular">Tus clientes (sin asignar)</option>
@@ -152,26 +153,30 @@ export default function Sueldos() {
             </div>
             {(() => {
               const lista = r.cobros.filter((c) => !filtro || (filtro === 'titular' ? c.asignadoA.length === 0 : c.asignadoA.some((x) => x.id === filtro)));
-              const total = lista.reduce((s, c) => s + c.monto, 0);
+              const sum = (k) => lista.reduce((n, c) => n + c[k], 0);
               return (
                 <div className="overflow-x-auto panel-plano">
                   <table className="w-full text-left text-sm">
                     <thead className="encabezado-tabla">
-                      <tr><th className="px-3 py-2">Fecha</th><th className="px-3 py-2">Cliente</th><th className="px-3 py-2">Concepto</th><th className="px-3 py-2">Atribuido a</th><th className="px-3 py-2 text-right">Monto</th></tr>
+                      <tr><th className="px-3 py-2">Cliente</th><th className="px-3 py-2">Concepto</th><th className="px-3 py-2 text-right">Facturado</th><th className="px-3 py-2 text-right">Cobrado</th><th className="px-3 py-2">Cuándo se cobró</th><th className="px-3 py-2">Atribuido a</th></tr>
                     </thead>
                     <tbody className="divide-y">
                       {lista.map((c) => (
                         <tr key={c.id}>
-                          <td className="whitespace-nowrap px-3 py-2 text-machine">{verFecha(c.fecha)}</td>
                           <td className="px-3 py-2"><Link className="enlace" to={`/clientes/${c.clienteId}`}>{c.cliente}</Link></td>
-                          <td className="px-3 py-2 text-machine">{c.concepto || '—'}</td>
+                          <td className="px-3 py-2 text-machine">{c.concepto}</td>
+                          <td className="px-3 py-2 text-right text-machine">{pesos(c.facturado)}</td>
+                          <td className={`px-3 py-2 text-right font-medium ${c.cobrado === 0 ? 'text-machine' : ''}`}>{pesos(c.cobrado)}</td>
+                          <td className="px-3 py-2 text-xs text-machine">
+                            {c.cobradoEn.length ? c.cobradoEn.map((x) => `${verFecha(x.fecha)} (${pesos(x.monto)})`).join(' · ') : <span className="text-figure">Sin cobrar</span>}
+                            {c.saldo > 0 && c.cobrado > 0 && <span className="block text-figure">Falta cobrar {pesos(c.saldo)}</span>}
+                          </td>
                           <td className="px-3 py-2">{c.asignadoA.length ? c.asignadoA.map((x) => x.nombre).join(', ') + (c.asignadoA.length > 1 ? ' (en partes iguales)' : '') : <span className="text-machine">Titular</span>}</td>
-                          <td className="px-3 py-2 text-right font-medium">{pesos(c.monto)}</td>
                         </tr>
                       ))}
-                      {lista.length === 0 && <tr><td colSpan={5} className="px-3 py-6 text-center text-machine">No hay cobros registrados en este mes.</td></tr>}
+                      {lista.length === 0 && <tr><td colSpan={6} className="px-3 py-6 text-center text-machine">No hay honorarios de este mes.</td></tr>}
                     </tbody>
-                    {lista.length > 0 && <tfoot><tr className="border-t border-figure"><td className="px-3 py-2 font-medium" colSpan={4}>Total ({lista.length} {lista.length === 1 ? 'cobro' : 'cobros'})</td><td className="px-3 py-2 text-right font-medium">{pesos(total)}</td></tr></tfoot>}
+                    {lista.length > 0 && <tfoot><tr className="border-t border-figure"><td className="px-3 py-2 font-medium" colSpan={2}>Total ({lista.length} {lista.length === 1 ? 'honorario' : 'honorarios'})</td><td className="px-3 py-2 text-right text-machine">{pesos(sum('facturado'))}</td><td className="px-3 py-2 text-right font-medium">{pesos(sum('cobrado'))}</td><td colSpan={2} /></tr></tfoot>}
                   </table>
                 </div>
               );
