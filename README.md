@@ -152,7 +152,7 @@ Si cambiás un porcentaje, el "corresponde" de meses pasados se recalcula; lo ya
 ## CUIT y claves (ARCA y Rentas)
 
 Sección **CUIT y claves**: una tabla con cada cliente, su CUIT y las claves de ARCA y de Rentas, a la vista, con un botón *Copiar* en cada dato. Se cargan y editan con "Cargar"/"Editar" en cada fila.
-La ven los administradores y las personas a quienes se les concede el permiso *Ve las claves* (en *Usuarios*; por defecto no), y cada una solo ve los clientes que tiene asignados.
+La ve **todo el equipo** (no hace falta activar ningún permiso); quien tiene acceso limitado a clientes ve solo los que tiene asignados.
 Se guardan sin cifrar en la colección `claves` (la base solo la lee el servidor, detrás del inicio de sesión) y no salen en la lista de clientes ni en las exportaciones. Al eliminar un cliente definitivamente se borran también sus claves.
 
 ## Roles

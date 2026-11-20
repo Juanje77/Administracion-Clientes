@@ -9,7 +9,7 @@ const puedeVerDinero = (u) => Boolean(u) && (u.rol === 'ADMIN' || u.verDinero ==
 // que se les asigne alguno.
 const veTodosLosClientes = (u) => Boolean(u) && (u.rol === 'ADMIN' || u.accesoClientes !== 'ASIGNADOS');
 
-// Claves de ARCA y Rentas de los clientes: administradores siempre; el resto, solo si se le concedió.
-const puedeVerClaves = (u) => Boolean(u) && (u.rol === 'ADMIN' || u.verClaves === true);
+// Claves de ARCA y Rentas de los clientes: todo el equipo (cada persona ve solo los clientes que tiene asignados).
+const puedeVerClaves = (u) => Boolean(u);
 
 module.exports = { puedeVerDinero, veTodosLosClientes, puedeVerClaves };

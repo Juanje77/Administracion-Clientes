@@ -1836,22 +1836,18 @@ describe('CUIT y claves de ARCA y Rentas', () => {
   beforeAll(async () => {
     u.a = (await admin.post('/api/clientes').send({ razonSocial: 'Claves A', cuit: cuitDe('2055550001'), estado: 'POTENCIAL' }).expect(201)).body.id;
     u.b = (await admin.post('/api/clientes').send({ razonSocial: 'Claves B', estado: 'POTENCIAL' }).expect(201)).body.id;
-    u.rita = (await admin.post('/api/usuarios').send({ nombre: 'Rita Claves', email: 'ritac@t.com', password: 'clave12345', verClaves: true }).expect(201)).body.id;
+    u.rita = (await admin.post('/api/usuarios').send({ nombre: 'Rita Claves', email: 'ritac@t.com', password: 'clave12345' }).expect(201)).body.id;
     await admin.put(`/api/clientes/${u.a}`).send({ razonSocial: 'Claves A', cuit: cuitDe('2055550001'), estado: 'POTENCIAL', etiquetas: [], responsables: [u.rita] }).expect(200);
     rita2 = await login('ritac@t.com');
   });
 
-  it('solo entra quien tiene el permiso (los administradores siempre) y se puede dar y quitar enseguida', async () => {
-    await user.get('/api/claves').expect(403); // Ana no tiene permiso
+  it('la ve todo el equipo, sin activar ningún permiso, pero hace falta iniciar sesión', async () => {
+    await request(app).get('/api/claves').expect(401);
     await admin.get('/api/claves').expect(200);
+    await user.get('/api/claves').expect(200); // Ana, sin ningún permiso especial
+    expect((await user.get('/api/auth/me').expect(200)).body.verClaves).toBe(true);
     expect((await rita2.get('/api/auth/me').expect(200)).body.verClaves).toBe(true);
-    expect((await user.get('/api/auth/me').expect(200)).body.verClaves).toBe(false);
-    const ana = (await admin.get('/api/usuarios').expect(200)).body.find((x) => x.email === 'ana@t.com').id;
-    await admin.patch(`/api/usuarios/${ana}`).send({ verClaves: true }).expect(200);
-    await user.get('/api/claves').expect(200);
-    await admin.patch(`/api/usuarios/${ana}`).send({ verClaves: false }).expect(200);
-    await user.get('/api/claves').expect(403);
-    await user.put(`/api/claves/${u.a}`).send({ arca: 'x' }).expect(403);
+    await user.put(`/api/claves/${u.a}`).send({ arca: 'de-ana' }).expect(200);
   });
 
   it('la tabla trae cada cliente con su CUIT y sus claves', async () => {
