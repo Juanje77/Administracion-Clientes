@@ -123,7 +123,7 @@ export default function Usuarios() {
           <input type="checkbox" className="mt-0.5" checked={f.verClaves || f.rol === 'ADMIN'} disabled={f.rol === 'ADMIN'} onChange={(e) => setF({ ...f, verClaves: e.target.checked })} />
           <span>
             Puede ver las claves de ARCA y Rentas de sus clientes
-            <span className="block text-xs text-machine">Por defecto no. Solo ve las de los clientes que tiene asignados y cada consulta queda registrada.</span>
+            <span className="block text-xs text-machine">Por defecto no. Solo ve las de los clientes que tiene asignados.</span>
           </span>
         </label>
         <label className="flex flex-wrap items-center gap-2 text-sm sm:col-span-5">

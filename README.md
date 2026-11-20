@@ -62,7 +62,6 @@ estáticos y la API corre como función en `/api/*`.
    | `ESTUDIO_NOMBRE` | nombre que aparece en los emails (ej. `Estudio Costantini`) |
    | `APP_URL` | dirección del sistema, para el botón "Abrir la agenda" de los resúmenes |
    | `CRON_SECRET` | texto largo aleatorio: protege el envío automático diario |
-   | `CLAVES_SECRET` | frase larga y aleatoria (mín. 16 caracteres): llave con la que se cifran las claves de ARCA y Rentas. Guardala también fuera del sistema |
    | `TZ_NEGOCIO` | opcional; por defecto `America/Argentina/Buenos_Aires` |
 3. *Deploy*. Cada `git push` a la rama de producción vuelve a desplegar solo.
 4. El primer administrador se crea una sola vez desde tu PC con `npm run seed` (apunta a tu Firestore real).
@@ -152,13 +151,9 @@ Si cambiás un porcentaje, el "corresponde" de meses pasados se recalcula; lo ya
 
 ## CUIT y claves (ARCA y Rentas)
 
-Sección **CUIT y claves**: una tabla con cada cliente, su CUIT y las claves de ARCA y de Rentas. La ven los administradores y las personas a quienes se les concede el permiso *Ve las claves* (en *Usuarios*; por defecto no), y cada una solo ve los clientes que tiene asignados.
-
-- **Cifradas:** las claves se guardan con AES-256-GCM en la colección `claves`, nunca en texto plano. No salen en la lista de clientes, ni en las exportaciones, ni en el historial de envíos.
-- **No se muestran solas:** la tabla muestra puntos; con *Ver* aparece la clave unos 15 segundos y con *Copiar* va al portapapeles sin mostrarse.
-- **Registro:** cada vez que alguien ve, cambia o borra una clave queda anotado (quién, cuándo y de qué cliente, sin guardar la clave). Los administradores lo consultan con "Ver quién consultó las claves".
-- **Configuración obligatoria:** la variable de entorno **`CLAVES_SECRET`** (mínimo 16 caracteres; una frase larga y al azar) es la llave del cifrado. Cargala en Vercel y **guardala también en un lugar seguro fuera del sistema**: si se pierde, las claves guardadas no se pueden recuperar. Si se cambia, hay que volver a cargarlas. Sin esa variable la sección avisa que falta configurarla.
-- Al eliminar un cliente definitivamente se borran también sus claves.
+Sección **CUIT y claves**: una tabla con cada cliente, su CUIT y las claves de ARCA y de Rentas, a la vista, con un botón *Copiar* en cada dato. Se cargan y editan con "Cargar"/"Editar" en cada fila.
+La ven los administradores y las personas a quienes se les concede el permiso *Ve las claves* (en *Usuarios*; por defecto no), y cada una solo ve los clientes que tiene asignados.
+Se guardan sin cifrar en la colección `claves` (la base solo la lee el servidor, detrás del inicio de sesión) y no salen en la lista de clientes ni en las exportaciones. Al eliminar un cliente definitivamente se borran también sus claves.
 
 ## Roles
 - **Administrador:** gestiona usuarios y puede eliminar clientes definitivamente.
