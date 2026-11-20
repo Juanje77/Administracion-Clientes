@@ -156,6 +156,8 @@ La ve **todo el equipo** (no hace falta activar ningún permiso); quien tiene ac
 Se guardan sin cifrar en la colección `claves` (la base solo la lee el servidor, detrás del inicio de sesión) y no salen en la lista de clientes ni en las exportaciones. Al eliminar un cliente definitivamente se borran también sus claves.
 
 ## Roles
+
+Si alguien olvidó su contraseña o no puede ingresar, un administrador la restablece desde **Usuarios → Contraseña** (mínimo 8 caracteres); la persona puede cambiarla luego en *Mi cuenta*.
 - **Administrador:** gestiona usuarios y puede eliminar clientes definitivamente.
 - **Usuario:** opera clientes e interacciones. "Eliminar" archiva (estado Inactivo).
 

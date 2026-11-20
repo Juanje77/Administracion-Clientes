@@ -43,6 +43,7 @@ function AsignarClientes({ usuario, cerrar, alGuardar }) {
         <span className="tecnica text-machine">{marcados.size} asignados</span>
       </div>
       {error && <Alerta tipo="error">{error}</Alerta>}
+      {aviso && <Alerta tipo="ok">{aviso}</Alerta>}
       <input className="campo" placeholder="Buscar cliente…" value={q} onChange={(e) => setQ(e.target.value)} />
       {!clientes ? <p className="text-sm text-machine">Cargando…</p> : (
         <div className="max-h-72 divide-y overflow-y-auto border-y">
@@ -68,6 +69,7 @@ export default function Usuarios() {
   const [f, setF] = useState({ nombre: '', email: '', password: '', rol: 'USUARIO', verDinero: false, accesoClientes: 'ASIGNADOS', porcentajeSueldo: '' });
   const [error, setError] = useState('');
   const [asignando, setAsignando] = useState(null);
+  const [aviso, setAviso] = useState('');
 
   const cargar = () => api('/usuarios').then(setLista);
   useEffect(() => { cargar(); }, []);
@@ -91,6 +93,17 @@ export default function Usuarios() {
       cargar();
     } catch (ex) {
       setError(ex.message);
+    }
+  }
+  async function cambiarClave(u) {
+    const nueva = prompt(`Nueva contraseña para ${u.nombre} (mínimo 8 caracteres):`);
+    if (nueva === null) return;
+    setError(''); setAviso('');
+    try {
+      await api(`/usuarios/${u.id}/password`, { metodo: 'PUT', cuerpo: { password: nueva } });
+      setAviso(`Listo: ${u.nombre} ya puede ingresar con la nueva contraseña (${u.email}).`);
+    } catch (ex) {
+      setError(Object.values(ex.detalles || {}).flat()[0] || ex.message);
     }
   }
   const alternar = (u) => cambiar(u, { activo: !u.activo });
@@ -172,7 +185,7 @@ export default function Usuarios() {
                   )}
                 </td>
                 <td className="px-3 py-2">{u.activo ? 'Activo' : 'Desactivado'}</td>
-                <td className="px-3 py-2 text-right"><button className="btn-sec btn-sm" onClick={() => alternar(u)}>{u.activo ? 'Desactivar' : 'Activar'}</button></td>
+                <td className="px-3 py-2 text-right"><div className="flex justify-end gap-2"><button className="btn-sec btn-sm" onClick={() => cambiarClave(u)}>Contraseña</button><button className="btn-sec btn-sm" onClick={() => alternar(u)}>{u.activo ? 'Desactivar' : 'Activar'}</button></div></td>
               </tr>
             ))}
           </tbody>

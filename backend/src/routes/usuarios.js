@@ -57,6 +57,16 @@ router.patch('/:id', async (req, res) => {
   res.json(publico(id, (await ref.get()).data()));
 });
 
+// Restablecer la contraseña de otra persona (por si la olvidó o no puede ingresar). Ella puede cambiarla luego en Mi cuenta.
+router.put('/:id/password', async (req, res) => {
+  const password = String(req.body.password ?? '');
+  if (password.length < 8) return res.status(400).json({ error: 'Datos inválidos', detalles: { password: ['Mínimo 8 caracteres'] } });
+  const ref = db.collection('usuarios').doc(req.params.id);
+  if (!(await ref.get()).exists) return res.status(404).json({ error: 'Usuario no encontrado' });
+  await ref.update({ passwordHash: await bcrypt.hash(password, 12) });
+  res.json({ ok: true });
+});
+
 // ---- Clientes asignados a una persona (la otra cara de "responsables" en la ficha del cliente) ----
 router.get('/:id/clientes', async (req, res) => {
   if (!(await db.collection('usuarios').doc(req.params.id).get()).exists) return res.status(404).json({ error: 'Usuario no encontrado' });

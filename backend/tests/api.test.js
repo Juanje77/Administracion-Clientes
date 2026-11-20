@@ -1879,3 +1879,16 @@ describe('CUIT y claves de ARCA y Rentas', () => {
     expect((await db.collection('claves').doc(u.a).get()).exists).toBe(false);
   });
 });
+
+describe('restablecer la contraseña de otra persona', () => {
+  it('solo un administrador puede, y la persona entra con la nueva (la vieja deja de servir)', async () => {
+    const id = (await admin.post('/api/usuarios').send({ nombre: 'Olvidadiza', email: 'olvido@t.com', password: 'vieja-clave-1' }).expect(201)).body.id;
+    await request(app).post('/api/auth/login').send({ email: 'olvido@t.com', password: 'vieja-clave-1' }).expect(200);
+    await user.put(`/api/usuarios/${id}/password`).send({ password: 'nueva-clave-2' }).expect(403);
+    await admin.put(`/api/usuarios/${id}/password`).send({ password: 'corta' }).expect(400);
+    await admin.put('/api/usuarios/no-existe/password').send({ password: 'nueva-clave-2' }).expect(404);
+    await admin.put(`/api/usuarios/${id}/password`).send({ password: 'nueva-clave-2' }).expect(200);
+    await request(app).post('/api/auth/login').send({ email: 'olvido@t.com', password: 'vieja-clave-1' }).expect(401);
+    await request(app).post('/api/auth/login').send({ email: 'OLVIDO@t.com ', password: 'nueva-clave-2' }).expect(200); // el email no distingue mayúsculas ni espacios
+  });
+});
