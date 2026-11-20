@@ -62,6 +62,7 @@ estáticos y la API corre como función en `/api/*`.
    | `ESTUDIO_NOMBRE` | nombre que aparece en los emails (ej. `Estudio Costantini`) |
    | `APP_URL` | dirección del sistema, para el botón "Abrir la agenda" de los resúmenes |
    | `CRON_SECRET` | texto largo aleatorio: protege el envío automático diario |
+   | `CLAVES_SECRET` | frase larga y aleatoria (mín. 16 caracteres): llave con la que se cifran las claves de ARCA y Rentas. Guardala también fuera del sistema |
    | `TZ_NEGOCIO` | opcional; por defecto `America/Argentina/Buenos_Aires` |
 3. *Deploy*. Cada `git push` a la rama de producción vuelve a desplegar solo.
 4. El primer administrador se crea una sola vez desde tu PC con `npm run seed` (apunta a tu Firestore real).
