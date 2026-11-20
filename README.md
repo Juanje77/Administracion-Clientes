@@ -149,6 +149,16 @@ Para cada mes se ve: facturado, cobrado y lo que falta cobrar, sueldos que corre
 (cliente, concepto, facturado, cobrado, cuándo se cobró y a quién se atribuye; filtrable por persona). En cada persona se **registran los pagos** de sueldo (parciales o adelantos, con fecha y nota) y se pueden anular; se guardan en la colección `sueldoPagos`.
 Si cambiás un porcentaje, el "corresponde" de meses pasados se recalcula; lo ya pagado no cambia. Los gastos del estudio (alquiler, impuestos, etc.) no se descuentan: la ganancia es antes de ellos.
 
+## CUIT y claves (ARCA y Rentas)
+
+Sección **CUIT y claves**: una tabla con cada cliente, su CUIT y las claves de ARCA y de Rentas. La ven los administradores y las personas a quienes se les concede el permiso *Ve las claves* (en *Usuarios*; por defecto no), y cada una solo ve los clientes que tiene asignados.
+
+- **Cifradas:** las claves se guardan con AES-256-GCM en la colección `claves`, nunca en texto plano. No salen en la lista de clientes, ni en las exportaciones, ni en el historial de envíos.
+- **No se muestran solas:** la tabla muestra puntos; con *Ver* aparece la clave unos 15 segundos y con *Copiar* va al portapapeles sin mostrarse.
+- **Registro:** cada vez que alguien ve, cambia o borra una clave queda anotado (quién, cuándo y de qué cliente, sin guardar la clave). Los administradores lo consultan con "Ver quién consultó las claves".
+- **Configuración obligatoria:** la variable de entorno **`CLAVES_SECRET`** (mínimo 16 caracteres; una frase larga y al azar) es la llave del cifrado. Cargala en Vercel y **guardala también en un lugar seguro fuera del sistema**: si se pierde, las claves guardadas no se pueden recuperar. Si se cambia, hay que volver a cargarlas. Sin esa variable la sección avisa que falta configurarla.
+- Al eliminar un cliente definitivamente se borran también sus claves.
+
 ## Roles
 - **Administrador:** gestiona usuarios y puede eliminar clientes definitivamente.
 - **Usuario:** opera clientes e interacciones. "Eliminar" archiva (estado Inactivo).

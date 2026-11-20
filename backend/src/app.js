@@ -24,6 +24,7 @@ app.use('/api/vencimientos', requiereLogin, require('./routes/vencimientos'));
 app.use('/api/alertas', requiereLogin, require('./routes/alertas'));
 app.use('/api/calendarios', requiereLogin, require('./routes/calendarios'));
 app.use('/api/importacion', requiereLogin, require('./routes/importacion'));
+app.use('/api/claves', requiereLogin, require('./routes/claves'));
 app.use('/api/sueldos', requiereLogin, require('./routes/sueldos'));
 app.use('/api/honorarios', requiereLogin, requiereDinero, require('./routes/honorarios'));
 app.use('/api/dashboard', requiereLogin, require('./routes/dashboard'));

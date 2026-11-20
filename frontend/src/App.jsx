@@ -16,6 +16,7 @@ import Honorarios from './paginas/Honorarios';
 import Inicio from './paginas/Inicio';
 import Avisos from './paginas/Avisos';
 import Sueldos from './paginas/Sueldos';
+import Claves from './paginas/Claves';
 
 function Layout({ children }) {
   const { usuario, logout } = useAuth();
@@ -45,6 +46,7 @@ function Layout({ children }) {
       <NavLink to="/clientes" className={enlace}>Clientes</NavLink>
       {usuario.verDinero && <NavLink to="/honorarios" className={enlace}>Honorarios</NavLink>}
       <NavLink to="/calendario" className={enlace}>Calendario</NavLink>
+      {usuario.verClaves && <NavLink to="/claves" className={enlace}>CUIT y claves</NavLink>}
       {usuario.rol === 'ADMIN' && <NavLink to="/sueldos" className={enlace}>Sueldos</NavLink>}
       {usuario.rol === 'ADMIN' && <NavLink to="/avisos" className={enlace}>Avisos</NavLink>}
       {usuario.rol === 'ADMIN' && <NavLink to="/usuarios" className={enlace}>Usuarios</NavLink>}
@@ -104,6 +106,7 @@ export default function App() {
         <Route path="/cuenta" element={<Cuenta />} />
         <Route path="/calendario" element={<Calendario />} />
         {usuario.verDinero && <Route path="/honorarios" element={<Honorarios />} />}
+        {usuario.verClaves && <Route path="/claves" element={<Claves />} />}
         <Route path="/clientes" element={<Clientes />} />
         <Route path="/clientes/nuevo" element={<ClienteForm />} />
         <Route path="/clientes/:id" element={<ClienteDetalle />} />

@@ -1,6 +1,6 @@
 const jwt = require('jsonwebtoken');
 const { db } = require('../db');
-const { puedeVerDinero, veTodosLosClientes } = require('../permisos');
+const { puedeVerDinero, veTodosLosClientes, puedeVerClaves } = require('../permisos');
 
 const SECRET = () => process.env.JWT_SECRET;
 
@@ -20,7 +20,7 @@ async function cargarUsuario(id) {
   const doc = await db.collection('usuarios').doc(id).get();
   const d = doc.exists ? doc.data() : null;
   const usuario = d && d.activo !== false
-    ? { id, nombre: d.nombre, email: d.email, rol: d.rol, verDinero: puedeVerDinero(d), todosLosClientes: veTodosLosClientes(d) }
+    ? { id, nombre: d.nombre, email: d.email, rol: d.rol, verDinero: puedeVerDinero(d), todosLosClientes: veTodosLosClientes(d), verClaves: puedeVerClaves(d) }
     : null;
   if (TTL_MS) copias.set(id, { usuario, expira: Date.now() + TTL_MS });
   return usuario;
@@ -52,4 +52,10 @@ function requiereDinero(req, res, next) {
   next();
 }
 
-module.exports = { firmar, requiereLogin, requiereAdmin, requiereDinero, olvidarUsuario };
+// Claves de acceso (ARCA, Rentas) de los clientes.
+function requiereClaves(req, res, next) {
+  if (!req.usuario?.verClaves) return res.status(403).json({ error: 'No tienes acceso a las claves de los clientes' });
+  next();
+}
+
+module.exports = { firmar, requiereLogin, requiereAdmin, requiereDinero, requiereClaves, olvidarUsuario };

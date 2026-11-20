@@ -3,13 +3,13 @@ const bcrypt = require('bcryptjs');
 const { db } = require('../db');
 const { requiereAdmin, olvidarUsuario } = require('../middleware/auth');
 const { usuarioSchema, usuarioCambiosSchema } = require('../validacion');
-const { puedeVerDinero, veTodosLosClientes } = require('../permisos');
+const { puedeVerDinero, veTodosLosClientes, puedeVerClaves } = require('../permisos');
 const { todosLosClientes, invalidar } = require('../cache');
 const { FieldValue } = require('firebase-admin/firestore');
 
 // verDinero = acceso efectivo (los administradores siempre lo tienen)
 // verDinero / todosLosClientes = acceso efectivo (los administradores siempre lo tienen todo)
-const publico = (id, u) => ({ id, nombre: u.nombre, email: u.email, rol: u.rol, activo: u.activo, verDinero: puedeVerDinero(u), todosLosClientes: veTodosLosClientes(u), porcentajeSueldo: u.porcentajeSueldo ?? 0 });
+const publico = (id, u) => ({ id, nombre: u.nombre, email: u.email, rol: u.rol, activo: u.activo, verDinero: puedeVerDinero(u), todosLosClientes: veTodosLosClientes(u), porcentajeSueldo: u.porcentajeSueldo ?? 0, verClaves: puedeVerClaves(u) });
 
 // Lista mínima del equipo (para asignar tareas); disponible para cualquier usuario con sesión.
 router.get('/equipo', async (_req, res) => {

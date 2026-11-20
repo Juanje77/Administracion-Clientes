@@ -71,13 +71,15 @@ const usuarioSchema = z.object({
   rol: z.enum(['ADMIN', 'USUARIO']).default('USUARIO'),
   // Acceso a honorarios, cobros, deudas y montos (los administradores siempre lo tienen).
   verDinero: z.boolean().default(false),
+  // Acceso a la sección Claves (ARCA y Rentas de los clientes).
+  verClaves: z.boolean().default(false),
   // 'ASIGNADOS': solo ve los clientes que se le asignen (por defecto en usuarios nuevos). 'TODOS': ve todos.
   accesoClientes: z.enum(['TODOS', 'ASIGNADOS']).default('ASIGNADOS'),
   // % de lo cobrado de sus clientes que se le paga como sueldo (ver Sueldos).
   porcentajeSueldo: z.coerce.number().min(0).max(100).default(0),
 });
 
-const usuarioCambiosSchema = z.object({ activo: z.boolean().optional(), verDinero: z.boolean().optional(), accesoClientes: z.enum(['TODOS', 'ASIGNADOS']).optional(), porcentajeSueldo: z.coerce.number().min(0).max(100).optional() })
+const usuarioCambiosSchema = z.object({ activo: z.boolean().optional(), verDinero: z.boolean().optional(), verClaves: z.boolean().optional(), accesoClientes: z.enum(['TODOS', 'ASIGNADOS']).optional(), porcentajeSueldo: z.coerce.number().min(0).max(100).optional() })
   .refine((c) => Object.values(c).some((v) => v !== undefined), 'Nada para cambiar');
 
 // Fecha "AAAA-MM-DD" que exista de verdad (rechaza 2026-02-31).
@@ -157,6 +159,12 @@ const pagoSueldoSchema = z.object({
   nota: opcional(z.string().trim().max(300)),
 });
 
+// Claves de un cliente: un campo ausente no se toca; una cadena vacía lo borra.
+const clavesSchema = z.object({
+  arca: z.string().max(200).optional(),
+  rentas: z.string().max(200).optional(),
+});
+
 const CATEGORIAS_DOC = ['CONTRATO', 'PRESUPUESTO', 'FACTURA', 'CONSTANCIA', 'BALANCE', 'OTRO'];
 
 const avisosConfigSchema = z.object({
@@ -176,5 +184,5 @@ const passwordSchema = z.object({
 module.exports = {
   cuitValido, clienteSchema, interaccionSchema, usuarioSchema, usuarioCambiosSchema,
   tareaSchema, tareaCambiosSchema, vencimientoSchema, calendarioSchema, passwordSchema, periodo,
-  honorarioSchema, honorarioCambiosSchema, pagoSchema, pagoSueldoSchema, CATEGORIAS_DOC, avisosConfigSchema,
+  honorarioSchema, honorarioCambiosSchema, pagoSchema, pagoSueldoSchema, clavesSchema, CATEGORIAS_DOC, avisosConfigSchema,
 };

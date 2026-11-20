@@ -164,6 +164,7 @@ router.delete('/:id', async (req, res) => {
       await db.recursiveDelete(ref); // borra también el historial (subcolección)
       await borrarDocumentosDeCliente(req.params.id);
       await borrarHonorarios((await db.collection('honorarios').where('clienteId', '==', req.params.id).get()).docs); // con sus cobros y totales
+      await require('../servicios/claves').borrarDeCliente(req.params.id); // y sus claves cifradas
       for (const col of ['tareas', 'vencimientos', 'pagos']) {
         const huerfanos = await db.collection(col).where('clienteId', '==', req.params.id).get();
         await Promise.all(huerfanos.docs.map((d) => d.ref.delete()));

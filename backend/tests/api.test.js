@@ -1828,3 +1828,89 @@ describe('estado del estudio (Inicio)', () => {
     expect(r.faltan.sociedadesSinCierre).toHaveProperty('ejemplos');
   });
 });
+
+describe('claves de ARCA y Rentas', () => {
+  const u = {};
+  let ana2, rita2;
+
+  beforeAll(async () => {
+    process.env.CLAVES_SECRET = 'llave-de-prueba-muy-larga-123';
+    u.a = (await admin.post('/api/clientes').send({ razonSocial: 'Claves A', cuit: cuitDe('2055550001'), estado: 'POTENCIAL' }).expect(201)).body.id;
+    u.b = (await admin.post('/api/clientes').send({ razonSocial: 'Claves B', estado: 'POTENCIAL' }).expect(201)).body.id;
+    const r = (await admin.post('/api/usuarios').send({ nombre: 'Rita Claves', email: 'ritac@t.com', password: 'clave12345', verClaves: true }).expect(201)).body;
+    u.rita = r.id;
+    await admin.put(`/api/clientes/${u.a}`).send({ razonSocial: 'Claves A', cuit: cuitDe('2055550001'), estado: 'POTENCIAL', etiquetas: [], responsables: [u.rita] }).expect(200);
+    rita2 = await login('ritac@t.com');
+  });
+
+  it('solo entra quien tiene el permiso (los administradores siempre)', async () => {
+    await user.get('/api/claves').expect(403); // Ana no tiene permiso
+    await admin.get('/api/claves').expect(200);
+    expect((await rita2.get('/api/auth/me').expect(200)).body.verClaves).toBe(true);
+    expect((await user.get('/api/auth/me').expect(200)).body.verClaves).toBe(false);
+    // se le puede dar y quitar enseguida
+    await admin.patch(`/api/usuarios/${(await admin.get('/api/usuarios').expect(200)).body.find((x) => x.email === 'ana@t.com').id}`).send({ verClaves: true }).expect(200);
+    await user.get('/api/claves').expect(200);
+    await admin.patch(`/api/usuarios/${(await admin.get('/api/usuarios').expect(200)).body.find((x) => x.email === 'ana@t.com').id}`).send({ verClaves: false }).expect(200);
+    await user.get('/api/claves').expect(403);
+  });
+
+  it('guarda las claves cifradas, no las devuelve en la lista y las muestra de a una', async () => {
+    const r = (await admin.put(`/api/claves/${u.a}`).send({ arca: 'Arca#Secreta1', rentas: 'Rentas$2' }).expect(200)).body;
+    expect(r).toMatchObject({ id: u.a, arca: true, rentas: true });
+    const lista = (await admin.get('/api/claves').expect(200)).body;
+    const fila = lista.find((c) => c.id === u.a);
+    expect(fila).toMatchObject({ razonSocial: 'Claves A', arca: true, rentas: true });
+    expect(fila.cuit).toBe(cuitDe('2055550001'));
+    expect(JSON.stringify(lista)).not.toMatch(/Secreta1|Rentas\$2/);
+    expect(lista.find((c) => c.id === u.b)).toMatchObject({ arca: false, rentas: false });
+    // en la base están cifradas
+    const crudo = (await db.collection('claves').doc(u.a).get()).data();
+    expect(crudo.arca).toMatch(/^v1:/);
+    expect(JSON.stringify(crudo)).not.toMatch(/Secreta1|Rentas\$2/);
+    // se leen de a una
+    const v = await admin.get(`/api/claves/${u.a}/arca`).expect(200);
+    expect(v.body.clave).toBe('Arca#Secreta1');
+    expect(v.headers['cache-control']).toBe('no-store');
+    expect((await admin.get(`/api/claves/${u.a}/rentas`).expect(200)).body.clave).toBe('Rentas$2');
+    await admin.get(`/api/claves/${u.a}/otra`).expect(400);
+    await admin.get(`/api/claves/${u.b}/arca`).expect(404); // sin clave cargada
+  });
+
+  it('cambiar una no toca la otra y una cadena vacía la borra', async () => {
+    await admin.put(`/api/claves/${u.a}`).send({ arca: 'Nueva-Arca' }).expect(200);
+    expect((await admin.get(`/api/claves/${u.a}/arca`).expect(200)).body.clave).toBe('Nueva-Arca');
+    expect((await admin.get(`/api/claves/${u.a}/rentas`).expect(200)).body.clave).toBe('Rentas$2');
+    const r = (await admin.put(`/api/claves/${u.a}`).send({ rentas: '' }).expect(200)).body;
+    expect(r).toMatchObject({ arca: true, rentas: false });
+    await admin.get(`/api/claves/${u.a}/rentas`).expect(404);
+  });
+
+  it('quien ve solo algunos clientes ve únicamente las claves de los suyos', async () => {
+    const lista = (await rita2.get('/api/claves').expect(200)).body;
+    expect(lista.map((c) => c.id)).toEqual([u.a]);
+    expect((await rita2.get(`/api/claves/${u.a}/arca`).expect(200)).body.clave).toBe('Nueva-Arca');
+    await rita2.get(`/api/claves/${u.b}/arca`).expect(404);
+    await rita2.put(`/api/claves/${u.b}`).send({ arca: 'x' }).expect(404);
+  });
+
+  it('registra quién vio o cambió cada clave (solo los administradores lo consultan)', async () => {
+    const r = (await admin.get('/api/claves/accesos').expect(200)).body;
+    expect(r.some((x) => x.tipo === 'ver' && x.usuarioNombre === 'Rita Claves' && x.clienteNombre === 'Claves A' && x.campo === 'arca')).toBe(true);
+    expect(r.some((x) => x.tipo === 'editar')).toBe(true);
+    expect(r.some((x) => x.tipo === 'borrar' && x.campo === 'rentas')).toBe(true);
+    expect(JSON.stringify(r)).not.toMatch(/Nueva-Arca|Arca#Secreta1/); // el registro nunca guarda la clave
+    await rita2.get('/api/claves/accesos').expect(403);
+  });
+
+  it('sin la llave de cifrado no guarda nada y avisa; al borrar el cliente se borran sus claves', async () => {
+    const guardada = process.env.CLAVES_SECRET;
+    delete process.env.CLAVES_SECRET;
+    const r = await admin.put(`/api/claves/${u.b}`).send({ arca: 'x' });
+    expect(r.status).toBe(503);
+    expect(r.body.error).toMatch(/CLAVES_SECRET/);
+    process.env.CLAVES_SECRET = guardada;
+    await admin.delete(`/api/clientes/${u.a}?definitivo=true`).expect(204);
+    expect((await db.collection('claves').doc(u.a).get()).exists).toBe(false);
+  });
+});

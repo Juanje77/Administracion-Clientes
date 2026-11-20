@@ -65,7 +65,7 @@ function AsignarClientes({ usuario, cerrar, alGuardar }) {
 
 export default function Usuarios() {
   const [lista, setLista] = useState([]);
-  const [f, setF] = useState({ nombre: '', email: '', password: '', rol: 'USUARIO', verDinero: false, accesoClientes: 'ASIGNADOS', porcentajeSueldo: '' });
+  const [f, setF] = useState({ nombre: '', email: '', password: '', rol: 'USUARIO', verDinero: false, verClaves: false, accesoClientes: 'ASIGNADOS', porcentajeSueldo: '' });
   const [error, setError] = useState('');
   const [asignando, setAsignando] = useState(null);
 
@@ -77,7 +77,7 @@ export default function Usuarios() {
     setError('');
     try {
       await api('/usuarios', { metodo: 'POST', cuerpo: f });
-      setF({ nombre: '', email: '', password: '', rol: 'USUARIO', verDinero: false, accesoClientes: 'ASIGNADOS', porcentajeSueldo: '' });
+      setF({ nombre: '', email: '', password: '', rol: 'USUARIO', verDinero: false, verClaves: false, accesoClientes: 'ASIGNADOS', porcentajeSueldo: '' });
       cargar();
     } catch (ex) {
       const detalle = ex instanceof ErrorApi ? Object.values(ex.detalles).flat().join(' ') : '';
@@ -119,6 +119,13 @@ export default function Usuarios() {
             </span>
           </span>
         </label>
+        <label className="flex items-start gap-2 text-sm sm:col-span-5">
+          <input type="checkbox" className="mt-0.5" checked={f.verClaves || f.rol === 'ADMIN'} disabled={f.rol === 'ADMIN'} onChange={(e) => setF({ ...f, verClaves: e.target.checked })} />
+          <span>
+            Puede ver las claves de ARCA y Rentas de sus clientes
+            <span className="block text-xs text-machine">Por defecto no. Solo ve las de los clientes que tiene asignados y cada consulta queda registrada.</span>
+          </span>
+        </label>
         <label className="flex flex-wrap items-center gap-2 text-sm sm:col-span-5">
           Sueldo: % de lo cobrado de sus clientes
           <input className="campo !w-20 text-right" type="number" min="0" max="100" step="0.5" placeholder="0" disabled={f.rol === 'ADMIN'} value={f.rol === 'ADMIN' ? '' : f.porcentajeSueldo} onChange={(e) => setF({ ...f, porcentajeSueldo: e.target.value })} aria-label="Porcentaje de sueldo" />
@@ -144,7 +151,7 @@ export default function Usuarios() {
       <div className="overflow-x-auto panel-plano">
         <table className="w-full text-left text-sm">
           <thead className="encabezado-tabla">
-            <tr><th className="px-3 py-2">Nombre</th><th className="px-3 py-2">Email</th><th className="px-3 py-2">Rol</th><th className="px-3 py-2">Ve el dinero</th><th className="px-3 py-2">Clientes</th><th className="px-3 py-2">Estado</th><th /></tr>
+            <tr><th className="px-3 py-2">Nombre</th><th className="px-3 py-2">Email</th><th className="px-3 py-2">Rol</th><th className="px-3 py-2">Ve el dinero</th><th className="px-3 py-2">Ve las claves</th><th className="px-3 py-2">Clientes</th><th className="px-3 py-2">Estado</th><th /></tr>
           </thead>
           <tbody className="divide-y">
             {lista.map((u) => (
@@ -157,6 +164,14 @@ export default function Usuarios() {
                     <label className="flex items-center gap-2">
                       <input type="checkbox" checked={u.verDinero} onChange={() => alternarDinero(u)} aria-label={`${u.nombre} puede ver el dinero`} />
                       <span className={u.verDinero ? 'font-medium text-figure' : 'text-machine'}>{u.verDinero ? 'Sí' : 'No'}</span>
+                    </label>
+                  )}
+                </td>
+                <td className="px-3 py-2">
+                  {u.rol === 'ADMIN' ? <span className="text-machine">Sí</span> : (
+                    <label className="flex items-center gap-2">
+                      <input type="checkbox" checked={u.verClaves} onChange={() => cambiar(u, { verClaves: !u.verClaves })} aria-label={`${u.nombre} puede ver las claves`} />
+                      <span className={u.verClaves ? 'font-medium text-figure' : 'text-machine'}>{u.verClaves ? 'Sí' : 'No'}</span>
                     </label>
                   )}
                 </td>
